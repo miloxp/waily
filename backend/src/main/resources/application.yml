@@ -3,9 +3,9 @@ spring:
     name: waitlist-backend
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/waitlist}
-    username: ${SPRING_DATASOURCE_USERNAME:waitlist}
-    password: ${SPRING_DATASOURCE_PASSWORD:waitlist}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/waitlist_db}
+    username: ${SPRING_DATASOURCE_USERNAME:waitlist_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:waitlist_password}
     driver-class-name: org.postgresql.Driver
 
   jpa:

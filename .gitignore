@@ -208,18 +208,6 @@ frontend/.idea/
 *.sqlite3
 
 # ===========================================
-# Docker
-# ===========================================
-
-# Docker volumes
-docker-data/
-postgres-data/
-
-# Docker Compose override files
-docker-compose.override.yml
-docker-compose.override.yaml
-
-# ===========================================
 # Operating System
 # ===========================================
 

@@ -1,228 +1,259 @@
-# Waitlist & Reservations
+# Lista de Espera y Reservaciones
 
-A full-stack application for restaurants and service businesses to manage waitlists and table reservations. Customers receive SMS updates when their table is ready or can check wait times via public links.
+Una aplicación full-stack para restaurantes y negocios de servicios para gestionar listas de espera y reservaciones de mesas. Los clientes reciben actualizaciones por SMS cuando su mesa está lista o pueden consultar los tiempos de espera a través de enlaces públicos.
 
-## Architecture
+## Arquitectura
 
-- **Backend**: Java 17 + Spring Boot 3 with Clean Architecture
-- **Frontend**: React.js with TypeScript, Vite, and Tailwind CSS
-- **Database**: PostgreSQL
-- **Messaging**: Twilio SMS (abstracted behind interface)
-- **Security**: Spring Security with JWT authentication
+- **Backend**: Java 17 + Spring Boot 3 con Arquitectura Limpia
+- **Frontend**: React.js con TypeScript, Vite y Tailwind CSS
+- **Base de Datos**: PostgreSQL
+- **Mensajería**: Twilio SMS (abstraído detrás de una interfaz)
+- **Seguridad**: Spring Security con autenticación JWT
 
-## Project Structure
+## Estructura del Proyecto
 
 ```
 waitlist/
-├── backend/                 # Spring Boot application
+├── backend/                 # Aplicación Spring Boot
 │   ├── src/main/java/
 │   │   └── com/waitlist/
-│   │       ├── domain/      # Domain entities and business logic
-│   │       ├── application/ # Use cases and services
-│   │       ├── infrastructure/ # External concerns (DB, SMS, etc.)
-│   │       └── presentation/ # Controllers and DTOs
-│   ├── src/test/java/       # Test classes
-│   └── src/main/resources/  # Configuration files
-├── frontend/                # React application
+│   │       ├── domain/      # Entidades de dominio y lógica de negocio
+│   │       ├── application/ # Casos de uso y servicios
+│   │       ├── infrastructure/ # Preocupaciones externas (DB, SMS, etc.)
+│   │       └── presentation/ # Controladores y DTOs
+│   ├── src/test/java/       # Clases de prueba
+│   └── src/main/resources/  # Archivos de configuración
+├── frontend/                # Aplicación React
 │   ├── src/
-│   │   ├── components/      # React components
-│   │   ├── pages/          # Page components
-│   │   ├── services/       # API services
-│   │   └── types/          # TypeScript types
-│   └── public/             # Static assets
-└── docker-compose.yml      # Docker orchestration
+│   │   ├── components/      # Componentes React
+│   │   ├── pages/          # Componentes de página
+│   │   ├── services/       # Servicios API
+│   │   └── types/          # Tipos TypeScript
+│   └── public/             # Recursos estáticos
+├── POSTGRESQL_SETUP.md     # Guía de configuración de PostgreSQL
+└── POSTMAN_TEST_CASES.md   # Guía de pruebas de API
 ```
 
-## Quick Start
-
-### Prerequisites
+## Prerrequisitos
 
 - Java 17+
 - Node.js 18+
-- Docker and Docker Compose
-- PostgreSQL (or use Docker)
+- PostgreSQL 12+
 
-### Backend Setup
+## Inicio Rápido
 
-1. Navigate to backend directory:
+### 1. Configuración de Base de Datos
+
+Primero, configura PostgreSQL localmente. Consulta [POSTGRESQL_SETUP.md](./POSTGRESQL_SETUP.md) para instrucciones detalladas.
+
+Configuración rápida:
+```bash
+# Instalar PostgreSQL (macOS con Homebrew)
+brew install postgresql@15
+brew services start postgresql@15
+
+# Crear base de datos y usuario
+psql postgres
+CREATE DATABASE waitlist_db;
+CREATE USER waitlist_user WITH PASSWORD 'waitlist_password';
+GRANT ALL PRIVILEGES ON DATABASE waitlist_db TO waitlist_user;
+\q
+```
+
+### 2. Configuración del Backend
+
+1. Navegar al directorio backend:
    ```bash
    cd backend
    ```
 
-2. Copy environment variables:
+2. Copiar variables de entorno:
    ```bash
    cp env.example .env
    ```
 
-3. Update `.env` with your configuration
+3. Actualizar `.env` con tu configuración (ver sección Variables de Entorno)
 
-4. Run with Docker:
-   ```bash
-   docker-compose up -d
-   ```
-
-5. Or run locally:
+4. Ejecutar la aplicación:
    ```bash
    ./mvnw spring-boot:run
    ```
 
-### Frontend Setup
+El backend estará disponible en `http://localhost:8080`
 
-1. Navigate to frontend directory:
+### 3. Configuración del Frontend
+
+1. Navegar al directorio frontend:
    ```bash
    cd frontend
    ```
 
-2. Install dependencies:
+2. Instalar dependencias:
    ```bash
    npm install
    ```
 
-3. Start development server:
+3. Copiar variables de entorno:
+   ```bash
+   cp env.example .env
+   ```
+
+4. Iniciar servidor de desarrollo:
    ```bash
    npm run dev
    ```
 
-## API Endpoints
+El frontend estará disponible en `http://localhost:5173`
 
-### Authentication
-- `POST /api/auth/register` - Register a new business account
-- `POST /api/auth/login` - Authenticate and return JWT
-- `GET /api/auth/profile` - Get business profile
+## Endpoints de API
 
-### Business Management
-- `GET /api/business` - List businesses
-- `GET /api/business/{id}` - Get business details
-- `PUT /api/business/{id}` - Update business info
+### Autenticación
+- `POST /api/auth/register` - Registrar una nueva cuenta de negocio
+- `POST /api/auth/login` - Autenticar y devolver JWT
+- `GET /api/auth/profile` - Obtener perfil del negocio
 
-### Customer Management
-- `POST /api/customers` - Create a customer
-- `GET /api/customers/{id}` - Get customer info
+### Gestión de Negocios
+- `GET /api/business` - Listar negocios
+- `GET /api/business/{id}` - Obtener detalles del negocio
+- `PUT /api/business/{id}` - Actualizar información del negocio
 
-### Waitlist Management
-- `POST /api/waitlist` - Add customer to waitlist
-- `GET /api/waitlist` - List all waitlist entries for authenticated business
-- `PATCH /api/waitlist/{id}/status` - Update status (waiting, called, seated, canceled)
-- `DELETE /api/waitlist/{id}` - Remove from waitlist
+### Gestión de Clientes
+- `POST /api/customers` - Crear un cliente
+- `GET /api/customers/{id}` - Obtener información del cliente
 
-### Reservation Management
-- `POST /api/reservations` - Create a reservation
-- `GET /api/reservations` - List all reservations
-- `GET /api/reservations/{id}` - Get reservation details
-- `PATCH /api/reservations/{id}` - Update reservation (status or time)
-- `DELETE /api/reservations/{id}` - Cancel reservation
+### Gestión de Lista de Espera
+- `POST /api/waitlist` - Agregar cliente a la lista de espera
+- `GET /api/waitlist` - Listar todas las entradas de lista de espera para el negocio autenticado
+- `PATCH /api/waitlist/{id}/status` - Actualizar estado (esperando, llamado, sentado, cancelado)
+- `DELETE /api/waitlist/{id}` - Remover de la lista de espera
 
-### Notifications
-- `POST /api/notifications/sms` - Send SMS to a customer using Twilio
-- `GET /api/notifications/status/{id}` - Check SMS delivery status
+### Gestión de Reservaciones
+- `POST /api/reservations` - Crear una reservación
+- `GET /api/reservations` - Listar todas las reservaciones
+- `GET /api/reservations/{id}` - Obtener detalles de la reservación
+- `PATCH /api/reservations/{id}` - Actualizar reservación (estado o hora)
+- `DELETE /api/reservations/{id}` - Cancelar reservación
 
-### Public Endpoints (No Auth)
-- `GET /public/waitlist/{businessId}` - Public endpoint showing estimated wait time
+### Notificaciones
+- `POST /api/notifications/sms` - Enviar SMS a un cliente usando Twilio
+- `GET /api/notifications/status/{id}` - Verificar estado de entrega del SMS
 
-## API Documentation
+### Endpoints Públicos (Sin Autenticación)
+- `GET /public/waitlist/{businessId}` - Endpoint público mostrando tiempo de espera estimado
 
-Once the backend is running, visit:
+## Documentación de API
+
+Una vez que el backend esté ejecutándose, visita:
 - Swagger UI: http://localhost:8080/swagger-ui.html
-- API Docs: http://localhost:8080/v3/api-docs
+- Documentos API: http://localhost:8080/v3/api-docs
 
-## Features
+## Características
 
-- **Business Registration**: Register new business accounts with user authentication
-- **User Management**: Link users to businesses with role-based access
-- **Waitlist Management**: Queue customers with position tracking and SMS notifications
-- **Reservation System**: Handle table reservations with time slots
-- **SMS Notifications**: Send updates to customers via Twilio (with mock for development)
-- **Public Waitlist Info**: Customers can check wait times via SMS links
-- **JWT Authentication**: Secure API endpoints with business-scoped access
-- **Clean Architecture**: Maintainable and testable code structure
+- **Registro de Negocios**: Registrar nuevas cuentas de negocio con autenticación de usuario
+- **Gestión de Usuarios**: Vincular usuarios a negocios con acceso basado en roles
+- **Gestión de Lista de Espera**: Cola de clientes con seguimiento de posición y notificaciones SMS
+- **Sistema de Reservaciones**: Manejar reservaciones de mesas con horarios
+- **Notificaciones SMS**: Enviar actualizaciones a clientes vía Twilio (con simulación para desarrollo)
+- **Información Pública de Lista de Espera**: Los clientes pueden consultar tiempos de espera vía enlaces SMS
+- **Autenticación JWT**: Endpoints de API seguros con acceso limitado por negocio
+- **Arquitectura Limpia**: Estructura de código mantenible y testeable
+- **Interfaz en Español**: Interfaz completa del frontend en español
 
-## Testing
+## Pruebas
 
-### Backend Tests
+### Pruebas del Backend
 ```bash
 cd backend
 ./mvnw test
 ```
 
-The project includes comprehensive unit tests, including a complete test suite for the "Add Customer to Waitlist" use case demonstrating:
-- Successful waitlist addition
-- Business validation
-- Customer validation
-- Duplicate entry prevention
-- Position calculation
-- SMS notification handling
-- Error scenarios
+El proyecto incluye pruebas unitarias completas, incluyendo una suite de pruebas completa para el caso de uso "Agregar Cliente a Lista de Espera" que demuestra:
+- Adición exitosa a la lista de espera
+- Validación de negocio
+- Validación de cliente
+- Prevención de entradas duplicadas
+- Cálculo de posición
+- Manejo de notificaciones SMS
+- Escenarios de error
 
-### Frontend Tests
+### Pruebas del Frontend
 ```bash
 cd frontend
 npm test
 ```
 
-## Environment Variables
+### Pruebas de API
+
+Consulta [POSTMAN_TEST_CASES.md](./POSTMAN_TEST_CASES.md) para instrucciones completas de pruebas de API y configuración de colección de Postman.
+
+## Variables de Entorno
 
 ### Backend (.env)
 ```bash
-# Database Configuration
+# Configuración de Base de Datos
 SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5432/waitlist_db
 SPRING_DATASOURCE_USERNAME=waitlist_user
 SPRING_DATASOURCE_PASSWORD=waitlist_password
 
-# JWT Configuration
+# Configuración JWT
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 JWT_EXPIRATION=86400000
 
-# Twilio Configuration (optional - uses mock if not provided)
+# Configuración Twilio (opcional - usa simulación si no se proporciona)
 TWILIO_ACCOUNT_SID=your-twilio-account-sid
 TWILIO_AUTH_TOKEN=your-twilio-auth-token
 TWILIO_PHONE_NUMBER=your-twilio-phone-number
 
-# Application Configuration
+# Configuración de Aplicación
 SERVER_PORT=8080
 CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
 
-# SMS Configuration
+# Configuración SMS
 SMS_MOCK_ENABLED=true
 ```
 
 ### Frontend (.env)
 ```bash
-# API Configuration
+# Configuración API
 VITE_API_BASE_URL=http://localhost:8080/api
 
-# Application Configuration
-VITE_APP_NAME=Waitlist & Reservations
+# Configuración de Aplicación
+VITE_APP_NAME=Lista de Espera y Reservaciones
 VITE_APP_VERSION=1.0.0
 ```
 
-## Demo Credentials
+## Credenciales de Demostración
 
-After running the application, you can register a new business account or use the demo data. The system supports:
+Después de ejecutar la aplicación, puedes registrar una nueva cuenta de negocio o usar los datos de demostración. El sistema soporta:
 
-- **Business Registration**: Create new business accounts through the registration endpoint
-- **User Roles**: BUSINESS_OWNER, BUSINESS_MANAGER, BUSINESS_STAFF
-- **Business-scoped Access**: Users can only access data for their associated business
+- **Registro de Negocios**: Crear nuevas cuentas de negocio a través del endpoint de registro
+- **Roles de Usuario**: BUSINESS_OWNER, BUSINESS_MANAGER, BUSINESS_STAFF
+- **Acceso Limitado por Negocio**: Los usuarios solo pueden acceder a datos de su negocio asociado
 
-## SMS Integration
+Usuario administrador por defecto (creado automáticamente):
+- **Nombre de usuario**: admin@waitlist.com
+- **Contraseña**: admin123
 
-The system includes a complete SMS notification system:
+## Integración SMS
 
-- **Twilio Integration**: Real SMS sending via Twilio SDK
-- **Mock Service**: Development-friendly mock implementation
-- **Message Templates**: Predefined templates for waitlist and reservation notifications
-- **Status Tracking**: SMS delivery status monitoring (mock implementation)
+El sistema incluye un sistema completo de notificaciones SMS:
 
-## Production Deployment
+- **Integración Twilio**: Envío real de SMS vía SDK de Twilio
+- **Servicio Simulado**: Implementación simulada amigable para desarrollo
+- **Plantillas de Mensajes**: Plantillas predefinidas para notificaciones de lista de espera y reservaciones
+- **Seguimiento de Estado**: Monitoreo del estado de entrega de SMS (implementación simulada)
 
-For production deployment:
+## Despliegue en Producción
 
-1. Update environment variables with production values
-2. Set up proper Twilio credentials
-3. Configure production database
-4. Update CORS settings for production domains
-5. Use proper JWT secrets
-6. Set up SSL/TLS certificates
+Para despliegue en producción:
 
-## Contributing
+1. Actualizar variables de entorno con valores de producción
+2. Configurar credenciales apropiadas de Twilio
+3. Configurar base de datos de producción
+4. Actualizar configuraciones CORS para dominios de producción
+5. Usar secretos JWT apropiados
+6. Configurar certificados SSL/TLS
 
-This is a production-ready scaffold that follows Clean Architecture principles and includes comprehensive testing. The codebase is structured for easy extension and maintenance.
+## Contribuir
+
+Este es un scaffold listo para producción que sigue principios de Arquitectura Limpia e incluye pruebas completas. El código está estructurado para fácil extensión y mantenimiento.
