@@ -1,0 +1,49 @@
+spring:
+  application:
+    name: waitlist-backend-test
+  
+  datasource:
+    url: jdbc:h2:mem:testdb
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+    open-in-view: false
+  
+  security:
+    jwt:
+      secret: test-jwt-secret-key-for-testing-only
+      expiration: 3600000
+
+server:
+  port: 0
+
+# Twilio Configuration (mock for testing)
+twilio:
+  account-sid: test-account-sid
+  auth-token: test-auth-token
+  phone-number: +1234567890
+
+# CORS Configuration
+cors:
+  allowed-origins: http://localhost:3000,http://localhost:5173
+
+# SMS Mock Configuration
+sms:
+  mock:
+    enabled: true
+
+# Logging
+logging:
+  level:
+    com.waitlist: DEBUG
+    org.springframework.security: DEBUG
+

@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: waitlist-postgres
+    environment:
+      POSTGRES_DB: waitlist_db
+      POSTGRES_USER: waitlist_user
+      POSTGRES_PASSWORD: waitlist_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/src/main/resources/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - waitlist-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: waitlist-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/waitlist_db
+      SPRING_DATASOURCE_USERNAME: waitlist_user
+      SPRING_DATASOURCE_PASSWORD: waitlist_password
+      JWT_SECRET: your-jwt-secret-key-here
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    networks:
+      - waitlist-network
+    volumes:
+      - ./backend:/app
+    command: ["./mvnw", "spring-boot:run"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: waitlist-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8080/api
+    networks:
+      - waitlist-network
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: ["npm", "run", "dev", "--", "--host"]
+
+volumes:
+  postgres_data:
+
+networks:
+  waitlist-network:
+    driver: bridge
+
