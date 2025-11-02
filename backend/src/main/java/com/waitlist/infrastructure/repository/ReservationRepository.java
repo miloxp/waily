@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Repository
@@ -53,4 +54,14 @@ public interface ReservationRepository extends JpaRepository<Reservation, UUID> 
 
         @Query("SELECT r FROM Reservation r JOIN FETCH r.business JOIN FETCH r.customer")
         List<Reservation> findAllWithBusinessAndCustomer();
+
+        @Query("SELECT r FROM Reservation r JOIN FETCH r.business JOIN FETCH r.customer WHERE r.id = :id")
+        Optional<Reservation> findByIdWithBusinessAndCustomer(@Param("id") UUID id);
+
+        @Query("SELECT r FROM Reservation r JOIN FETCH r.business JOIN FETCH r.customer " +
+               "WHERE r.business.id IN :businessIds AND r.status IN :statuses " +
+               "ORDER BY r.reservationDate, r.reservationTime")
+        List<Reservation> findByBusinessIdsAndStatuses(
+                @Param("businessIds") List<UUID> businessIds,
+                @Param("statuses") List<ReservationStatus> statuses);
 }
