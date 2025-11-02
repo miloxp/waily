@@ -77,6 +77,55 @@ export enum WaitlistStatus {
   CANCELLED = "CANCELLED",
 }
 
+export enum UserRole {
+  PLATFORM_ADMIN = "PLATFORM_ADMIN",
+  BUSINESS_OWNER = "BUSINESS_OWNER",
+  BUSINESS_STAFF = "BUSINESS_STAFF",
+}
+
+export interface Subscription {
+  id: string;
+  businessId: string;
+  businessName?: string;
+  plan: SubscriptionPlan;
+  status: SubscriptionStatus;
+  startDate: string;
+  endDate?: string;
+  billingCycleDays: number;
+  monthlyPrice: number;
+  autoRenew: boolean;
+  trialEndDate?: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export enum SubscriptionPlan {
+  BASIC = "BASIC",
+  PRO = "PRO",
+  ENTERPRISE = "ENTERPRISE",
+}
+
+export enum SubscriptionStatus {
+  ACTIVE = "ACTIVE",
+  TRIAL = "TRIAL",
+  EXPIRED = "EXPIRED",
+  CANCELLED = "CANCELLED",
+  SUSPENDED = "SUSPENDED",
+}
+
+export interface User {
+  id: string;
+  username: string;
+  email: string;
+  role: UserRole;
+  businessIds: string[];
+  businessNames?: string[];
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LoginRequest {
   username: string;
   password: string;

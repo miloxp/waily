@@ -6,6 +6,8 @@ import {
   WaitlistEntry,
   LoginRequest,
   LoginResponse,
+  Subscription,
+  User,
 } from "../types";
 
 const API_BASE_URL =
@@ -269,13 +271,11 @@ class ApiService {
     return response.data;
   }
 
-  async addToWaitlist(
-    entry: Omit<WaitlistEntry, "id" | "createdAt" | "updatedAt">
-  ): Promise<WaitlistEntry> {
-    const response: AxiosResponse<WaitlistEntry> = await this.api.post(
-      "/waitlist",
-      entry
-    );
+  async addToWaitlist(data: {
+    customerId: string;
+    partySize: number;
+  }): Promise<any> {
+    const response = await this.api.post("/waitlist", data);
     return response.data;
   }
 
@@ -327,6 +327,129 @@ class ApiService {
   async getPublicWaitlistInfo(businessId: string): Promise<any> {
     const response = await this.api.get(`/public/waitlist/${businessId}`);
     return response.data;
+  }
+
+  // Subscription endpoints
+  async getSubscriptions(): Promise<Subscription[]> {
+    const response: AxiosResponse<Subscription[]> = await this.api.get(
+      "/subscriptions"
+    );
+    return response.data;
+  }
+
+  async getSubscription(id: string): Promise<Subscription> {
+    const response: AxiosResponse<Subscription> = await this.api.get(
+      `/subscriptions/${id}`
+    );
+    return response.data;
+  }
+
+  async getSubscriptionByBusiness(businessId: string): Promise<Subscription> {
+    const response: AxiosResponse<Subscription> = await this.api.get(
+      `/subscriptions/business/${businessId}`
+    );
+    return response.data;
+  }
+
+  async createSubscription(
+    subscription: Omit<Subscription, "id" | "createdAt" | "updatedAt" | "businessName">
+  ): Promise<Subscription> {
+    const response: AxiosResponse<Subscription> = await this.api.post(
+      "/subscriptions",
+      subscription
+    );
+    return response.data;
+  }
+
+  async updateSubscription(
+    id: string,
+    subscription: Partial<Subscription>
+  ): Promise<Subscription> {
+    const response: AxiosResponse<Subscription> = await this.api.put(
+      `/subscriptions/${id}`,
+      subscription
+    );
+    return response.data;
+  }
+
+  async activateSubscription(id: string): Promise<Subscription> {
+    const response: AxiosResponse<Subscription> = await this.api.put(
+      `/subscriptions/${id}/activate`
+    );
+    return response.data;
+  }
+
+  async cancelSubscription(id: string): Promise<Subscription> {
+    const response: AxiosResponse<Subscription> = await this.api.put(
+      `/subscriptions/${id}/cancel`
+    );
+    return response.data;
+  }
+
+  async suspendSubscription(id: string): Promise<Subscription> {
+    const response: AxiosResponse<Subscription> = await this.api.put(
+      `/subscriptions/${id}/suspend`
+    );
+    return response.data;
+  }
+
+  async deleteSubscription(id: string): Promise<void> {
+    await this.api.delete(`/subscriptions/${id}`);
+  }
+
+  // User endpoints
+  async getUsers(): Promise<User[]> {
+    const response: AxiosResponse<User[]> = await this.api.get("/users");
+    return response.data;
+  }
+
+  async getUser(id: string): Promise<User> {
+    const response: AxiosResponse<User> = await this.api.get(`/users/${id}`);
+    return response.data;
+  }
+
+  async getUsersByBusiness(businessId: string): Promise<User[]> {
+    const response: AxiosResponse<User[]> = await this.api.get(
+      `/users/business/${businessId}`
+    );
+    return response.data;
+  }
+
+  async createUser(
+    user: Omit<User, "id" | "createdAt" | "updatedAt" | "businessNames"> & {
+      password: string;
+    }
+  ): Promise<User> {
+    const response: AxiosResponse<User> = await this.api.post("/users", user);
+    return response.data;
+  }
+
+  async updateUser(
+    id: string,
+    user: Partial<
+      Omit<User, "id" | "createdAt" | "updatedAt" | "businessNames"> & {
+        password?: string;
+      }
+    >
+  ): Promise<User> {
+    const response: AxiosResponse<User> = await this.api.put(`/users/${id}`, user);
+    return response.data;
+  }
+
+  async activateUser(id: string): Promise<User> {
+    const response: AxiosResponse<User> = await this.api.put(`/users/${id}/activate`);
+    return response.data;
+  }
+
+  async deactivateUser(id: string): Promise<User> {
+    const response: AxiosResponse<User> = await this.api.put(
+      `/users/${id}/deactivate`
+    );
+    return response.data;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await this.api.delete(`/users/${id}`);
   }
 }
 
