@@ -1,15 +1,74 @@
-import { useQuery } from "react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "react-query";
 import { apiService } from "../services/api";
-import { Building2, Plus, Search } from "lucide-react";
+import { Building2, Plus, Search, CreditCard } from "lucide-react";
 import LoadingSpinner from "../components/LoadingSpinner";
-import { BusinessType } from "../types";
+import { Business, BusinessType, Subscription } from "../types";
+import BusinessForm from "../components/forms/BusinessForm";
+import SubscriptionForm from "../components/forms/SubscriptionForm";
+import toast from "react-hot-toast";
+import { useAuth } from "../hooks/useAuth";
+import { UserRole } from "../types";
 
 export default function BusinessesPage() {
+  const { role } = useAuth();
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [isSubscriptionFormOpen, setIsSubscriptionFormOpen] = useState(false);
+  const [selectedBusiness, setSelectedBusiness] = useState<Business | undefined>();
+  const [selectedBusinessForSubscription, setSelectedBusinessForSubscription] = useState<string>("");
+  const queryClient = useQueryClient();
+
   const {
     data: businesses,
     isLoading,
     refetch,
   } = useQuery("businesses", () => apiService.getBusinesses());
+
+  const { data: subscriptions } = useQuery(
+    "subscriptions",
+    () => apiService.getSubscriptions(),
+    { enabled: role === UserRole.PLATFORM_ADMIN }
+  );
+
+  // Create a map of businessId -> subscription for quick lookup
+  const subscriptionMap = new Map<string, Subscription>();
+  subscriptions?.forEach((sub) => {
+    subscriptionMap.set(sub.businessId, sub);
+  });
+
+  const deleteMutation = useMutation(
+    (id: string) => apiService.deleteBusiness(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries("businesses");
+        toast.success("Negocio eliminado exitosamente");
+      },
+      onError: () => {
+        toast.error("Error al eliminar el negocio");
+      },
+    }
+  );
+
+  const handleEdit = (business: Business) => {
+    setSelectedBusiness(business);
+    setIsFormOpen(true);
+  };
+
+  const handleAdd = () => {
+    setSelectedBusiness(undefined);
+    setIsFormOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (window.confirm("¿Estás seguro de que quieres eliminar este negocio?")) {
+      await deleteMutation.mutateAsync(id);
+    }
+  };
+
+  const handleCreateSubscription = (businessId: string) => {
+    setSelectedBusinessForSubscription(businessId);
+    setIsSubscriptionFormOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -28,7 +87,7 @@ export default function BusinessesPage() {
             Gestiona los perfiles de tu restaurante y negocio de servicios
           </p>
         </div>
-        <button className="btn-primary">
+        <button onClick={handleAdd} className="btn-primary">
           <Plus className="h-4 w-4 mr-2" />
           Agregar Negocio
         </button>
@@ -87,13 +146,55 @@ export default function BusinessesPage() {
                     Servicio Promedio: {business.averageServiceTime}min
                   </span>
                 </div>
+                {role === UserRole.PLATFORM_ADMIN && (
+                  <div className="mt-2 pt-2 border-t border-gray-200">
+                    {subscriptionMap.has(business.id) ? (
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <CreditCard className="h-4 w-4 text-gray-400 mr-2" />
+                          <span className="text-xs text-gray-600">
+                            Plan: {subscriptionMap.get(business.id)?.plan}
+                          </span>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          subscriptionMap.get(business.id)?.status === "ACTIVE"
+                            ? "bg-green-100 text-green-800"
+                            : subscriptionMap.get(business.id)?.status === "TRIAL"
+                            ? "bg-blue-100 text-blue-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}>
+                          {subscriptionMap.get(business.id)?.status}
+                        </span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => handleCreateSubscription(business.id)}
+                        className="flex items-center text-xs text-primary-600 hover:text-primary-700"
+                      >
+                        <CreditCard className="h-3 w-3 mr-1" />
+                        Crear Suscripción
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
             <div className="card-footer">
               <div className="flex space-x-2">
-                <button className="btn-outline flex-1">Editar</button>
-                <button className="btn-danger flex-1">Eliminar</button>
+                <button
+                  onClick={() => handleEdit(business)}
+                  className="btn-outline flex-1"
+                >
+                  Editar
+                </button>
+                <button
+                  onClick={() => handleDelete(business.id)}
+                  className="btn-danger flex-1"
+                  disabled={deleteMutation.isLoading}
+                >
+                  Eliminar
+                </button>
               </div>
             </div>
           </div>
@@ -110,6 +211,26 @@ export default function BusinessesPage() {
             Comienza creando un nuevo negocio.
           </p>
         </div>
+      )}
+
+      <BusinessForm
+        isOpen={isFormOpen}
+        onClose={() => {
+          setIsFormOpen(false);
+          setSelectedBusiness(undefined);
+        }}
+        business={selectedBusiness}
+      />
+
+      {role === UserRole.PLATFORM_ADMIN && (
+        <SubscriptionForm
+          isOpen={isSubscriptionFormOpen}
+          onClose={() => {
+            setIsSubscriptionFormOpen(false);
+            setSelectedBusinessForSubscription("");
+          }}
+          businessId={selectedBusinessForSubscription || undefined}
+        />
       )}
     </div>
   );

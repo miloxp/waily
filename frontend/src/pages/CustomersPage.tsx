@@ -1,14 +1,30 @@
+import { useState } from "react";
 import { useQuery } from "react-query";
 import { apiService } from "../services/api";
 import { UserCheck, Plus, Search, Phone, Mail } from "lucide-react";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { Customer } from "../types";
+import CustomerForm from "../components/forms/CustomerForm";
 
 export default function CustomersPage() {
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | undefined>();
+
   const {
     data: customers,
     isLoading,
     refetch,
   } = useQuery("customers", () => apiService.getCustomers());
+
+  const handleAdd = () => {
+    setSelectedCustomer(undefined);
+    setIsFormOpen(true);
+  };
+
+  const handleEdit = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setIsFormOpen(true);
+  };
 
   if (isLoading) {
     return (
@@ -27,7 +43,7 @@ export default function CustomersPage() {
             Gestiona la información de clientes y detalles de contacto
           </p>
         </div>
-        <button className="btn-primary">
+        <button onClick={handleAdd} className="btn-primary">
           <Plus className="h-4 w-4 mr-2" />
           Agregar Cliente
         </button>
@@ -83,7 +99,12 @@ export default function CustomersPage() {
 
             <div className="card-footer">
               <div className="flex space-x-2">
-                <button className="btn-outline flex-1">Editar</button>
+                <button
+                  onClick={() => handleEdit(customer)}
+                  className="btn-outline flex-1"
+                >
+                  Editar
+                </button>
                 <button className="btn-outline flex-1">Ver Historial</button>
               </div>
             </div>
@@ -102,6 +123,15 @@ export default function CustomersPage() {
           </p>
         </div>
       )}
+
+      <CustomerForm
+        isOpen={isFormOpen}
+        onClose={() => {
+          setIsFormOpen(false);
+          setSelectedCustomer(undefined);
+        }}
+        customer={selectedCustomer}
+      />
     </div>
   );
 }

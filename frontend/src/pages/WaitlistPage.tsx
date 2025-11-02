@@ -1,15 +1,69 @@
-import { useState } from "react";
-import { useQuery } from "react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "react-query";
 import { apiService } from "../services/api";
 import { Users, Plus, Search, Bell, UserCheck, Clock } from "lucide-react";
 import LoadingSpinner from "../components/LoadingSpinner";
-import { WaitlistStatus } from "../types";
+import { WaitlistStatus, UserRole } from "../types";
+import AddToWaitlistForm from "../components/forms/AddToWaitlistForm";
+import toast from "react-hot-toast";
+import { useAuth } from "../hooks/useAuth";
+
+// Extract businessId from JWT token
+function getBusinessIdFromToken(): string | null {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.businessId || null;
+  } catch {
+    return null;
+  }
+}
 
 export default function WaitlistPage() {
+  const { role } = useAuth();
   const { data: businesses } = useQuery("businesses", () =>
     apiService.getBusinesses()
   );
+  const { data: profile } = useQuery("profile", () => apiService.getProfile(), {
+    enabled: role !== UserRole.PLATFORM_ADMIN,
+  });
   const [selectedBusiness, setSelectedBusiness] = useState<string>("");
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const queryClient = useQueryClient();
+
+  // Filter businesses based on user role
+  const userBusinessId = profile?.business?.id || getBusinessIdFromToken();
+  const availableBusinesses =
+    role === UserRole.PLATFORM_ADMIN
+      ? businesses || []
+      : businesses?.filter((b) => b.id === userBusinessId) || [];
+  
+  // Debug logging (remove in production)
+  console.log("WaitlistPage Debug:", {
+    role,
+    businessesCount: businesses?.length || 0,
+    userBusinessId,
+    availableBusinessesCount: availableBusinesses.length,
+    profileBusiness: profile?.business,
+  });
+
+  // Auto-select business for non-platform-admin users
+  useEffect(() => {
+    if (
+      !selectedBusiness &&
+      availableBusinesses.length > 0 &&
+      role !== UserRole.PLATFORM_ADMIN
+    ) {
+      const userBusinessId =
+        profile?.business?.id || getBusinessIdFromToken();
+      if (userBusinessId) {
+        setSelectedBusiness(userBusinessId);
+      } else if (availableBusinesses.length === 1) {
+        setSelectedBusiness(availableBusinesses[0].id);
+      }
+    }
+  }, [availableBusinesses, profile, role, selectedBusiness]);
 
   const {
     data: waitlist,
@@ -50,7 +104,10 @@ export default function WaitlistPage() {
     }
   };
 
-  if (isLoading) {
+  const isLoadingBusinesses = !businesses;
+  const isLoadingProfile = role !== UserRole.PLATFORM_ADMIN && !profile;
+
+  if (isLoadingBusinesses || isLoadingProfile) {
     return (
       <div className="flex items-center justify-center h-64">
         <LoadingSpinner size="lg" />
@@ -67,7 +124,17 @@ export default function WaitlistPage() {
             Gestiona la lista de espera de clientes y el asiento
           </p>
         </div>
-        <button className="btn-primary">
+        <button
+          onClick={() => {
+            if (!selectedBusiness) {
+              toast.error("Por favor selecciona un negocio primero");
+              return;
+            }
+            setIsFormOpen(true);
+          }}
+          className="btn-primary"
+          disabled={!selectedBusiness}
+        >
           <Plus className="h-4 w-4 mr-2" />
           Agregar a Lista de Espera
         </button>
@@ -81,13 +148,20 @@ export default function WaitlistPage() {
             value={selectedBusiness}
             onChange={(e) => setSelectedBusiness(e.target.value)}
             className="input"
+            disabled={availableBusinesses.length === 0}
           >
-            <option value="">Elige un negocio...</option>
-            {businesses?.map((business) => (
-              <option key={business.id} value={business.id}>
-                {business.name}
-              </option>
-            ))}
+            {role === UserRole.PLATFORM_ADMIN && (
+              <option value="">Elige un negocio...</option>
+            )}
+            {availableBusinesses.length === 0 ? (
+              <option value="">No hay negocios disponibles</option>
+            ) : (
+              availableBusinesses.map((business) => (
+                <option key={business.id} value={business.id}>
+                  {business.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
         <div className="flex-1">
@@ -228,23 +302,58 @@ export default function WaitlistPage() {
                           </span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          {entry.status === WaitlistStatus.WAITING && (
-                            <button className="text-blue-600 hover:text-blue-900">
-                              Notificar
-                            </button>
-                          )}
-                          {entry.status === WaitlistStatus.NOTIFIED && (
-                            <button className="text-green-600 hover:text-green-900">
-                              Sentar
-                            </button>
-                          )}
-                          <button className="text-red-600 hover:text-red-900">
-                            Cancelar
-                          </button>
-                        </div>
-                      </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <div className="flex space-x-2">
+                      {entry.status === WaitlistStatus.WAITING && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await apiService.notifyCustomer(entry.id);
+                              queryClient.invalidateQueries(["waitlist", selectedBusiness]);
+                              toast.success("Cliente notificado");
+                            } catch {
+                              toast.error("Error al notificar al cliente");
+                            }
+                          }}
+                          className="text-blue-600 hover:text-blue-900"
+                        >
+                          Notificar
+                        </button>
+                      )}
+                      {entry.status === WaitlistStatus.NOTIFIED && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await apiService.seatCustomer(entry.id);
+                              queryClient.invalidateQueries(["waitlist", selectedBusiness]);
+                              toast.success("Cliente sentado");
+                            } catch {
+                              toast.error("Error al sentar al cliente");
+                            }
+                          }}
+                          className="text-green-600 hover:text-green-900"
+                        >
+                          Sentar
+                        </button>
+                      )}
+                      <button
+                        onClick={async () => {
+                          if (window.confirm("¿Cancelar esta entrada de la lista de espera?")) {
+                            try {
+                              await apiService.cancelWaitlistEntry(entry.id);
+                              queryClient.invalidateQueries(["waitlist", selectedBusiness]);
+                              toast.success("Entrada cancelada");
+                            } catch {
+                              toast.error("Error al cancelar");
+                            }
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </td>
                     </tr>
                   ))}
                 </tbody>
@@ -276,6 +385,14 @@ export default function WaitlistPage() {
             La lista de espera está vacía para este negocio.
           </p>
         </div>
+      )}
+
+      {selectedBusiness && (
+        <AddToWaitlistForm
+          isOpen={isFormOpen}
+          onClose={() => setIsFormOpen(false)}
+          businessId={selectedBusiness}
+        />
       )}
     </div>
   );

@@ -1,4 +1,5 @@
-import { useQuery } from "react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "react-query";
 import { apiService } from "../services/api";
 import {
   Calendar,
@@ -9,14 +10,72 @@ import {
   Clock,
 } from "lucide-react";
 import LoadingSpinner from "../components/LoadingSpinner";
-import { ReservationStatus } from "../types";
+import { ReservationStatus, Reservation } from "../types";
+import ReservationForm from "../components/forms/ReservationForm";
+import toast from "react-hot-toast";
 
 export default function ReservationsPage() {
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const queryClient = useQueryClient();
+
   const {
     data: reservations,
     isLoading,
     refetch,
   } = useQuery("reservations", () => apiService.getReservations());
+
+  const confirmMutation = useMutation(
+    (id: string) => apiService.confirmReservation(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries("reservations");
+        toast.success("Reservación confirmada");
+      },
+      onError: () => {
+        toast.error("Error al confirmar la reservación");
+      },
+    }
+  );
+
+  const cancelMutation = useMutation(
+    (id: string) => apiService.cancelReservation(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries("reservations");
+        toast.success("Reservación cancelada");
+      },
+      onError: () => {
+        toast.error("Error al cancelar la reservación");
+      },
+    }
+  );
+
+  const completeMutation = useMutation(
+    (id: string) => apiService.completeReservation(id),
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries("reservations");
+        toast.success("Reservación completada");
+      },
+      onError: () => {
+        toast.error("Error al completar la reservación");
+      },
+    }
+  );
+
+  const handleConfirm = async (id: string) => {
+    await confirmMutation.mutateAsync(id);
+  };
+
+  const handleCancel = async (id: string) => {
+    if (window.confirm("¿Estás seguro de que quieres cancelar esta reservación?")) {
+      await cancelMutation.mutateAsync(id);
+    }
+  };
+
+  const handleComplete = async (id: string) => {
+    await completeMutation.mutateAsync(id);
+  };
 
   const getStatusIcon = (status: ReservationStatus) => {
     switch (status) {
@@ -61,7 +120,10 @@ export default function ReservationsPage() {
             Gestiona las reservaciones de mesas y reservas
           </p>
         </div>
-        <button className="btn-primary">
+        <button
+          onClick={() => setIsFormOpen(true)}
+          className="btn-primary"
+        >
           <Plus className="h-4 w-4 mr-2" />
           Nueva Reservación
         </button>
@@ -158,18 +220,30 @@ export default function ReservationsPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       {reservation.status === ReservationStatus.PENDING && (
-                        <button className="text-green-600 hover:text-green-900">
+                        <button
+                          onClick={() => handleConfirm(reservation.id)}
+                          className="text-green-600 hover:text-green-900"
+                          disabled={confirmMutation.isLoading}
+                        >
                           Confirmar
                         </button>
                       )}
                       {reservation.status === ReservationStatus.CONFIRMED && (
-                        <button className="text-blue-600 hover:text-blue-900">
+                        <button
+                          onClick={() => handleComplete(reservation.id)}
+                          className="text-blue-600 hover:text-blue-900"
+                          disabled={completeMutation.isLoading}
+                        >
                           Completar
                         </button>
                       )}
                       {(reservation.status === ReservationStatus.PENDING ||
                         reservation.status === ReservationStatus.CONFIRMED) && (
-                        <button className="text-red-600 hover:text-red-900">
+                        <button
+                          onClick={() => handleCancel(reservation.id)}
+                          className="text-red-600 hover:text-red-900"
+                          disabled={cancelMutation.isLoading}
+                        >
                           Cancelar
                         </button>
                       )}
@@ -193,6 +267,11 @@ export default function ReservationsPage() {
           </p>
         </div>
       )}
+
+      <ReservationForm
+        isOpen={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+      />
     </div>
   );
 }

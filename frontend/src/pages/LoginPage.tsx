@@ -109,9 +109,13 @@ export default function LoginPage() {
                 </span>
               </div>
             </div>
-            <div className="mt-4 text-center text-sm text-gray-600">
-              <p>Admin: admin@waitlist.com / admin123</p>
-              <p>Negocio: business / business123</p>
+            <div className="mt-4 space-y-2 text-center text-sm text-gray-600">
+              <div className="font-semibold text-gray-700">PLATFORM_ADMIN (Tú)</div>
+              <p>platform@waitlist.com / platform123</p>
+              <div className="font-semibold text-gray-700 mt-3">BUSINESS_OWNER</div>
+              <p>demo-owner@restaurant.com / owner123</p>
+              <div className="font-semibold text-gray-700 mt-3">BUSINESS_STAFF</div>
+              <p>demo-staff@restaurant.com / staff123</p>
             </div>
           </div>
         </form>

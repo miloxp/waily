@@ -9,13 +9,32 @@ import {
   Clock,
 } from "lucide-react";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { useAuth } from "../hooks/useAuth";
+import { UserRole } from "../types";
+
+// Extract businessId from JWT token
+function getBusinessIdFromToken(): string | null {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return null;
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.businessId || null;
+  } catch {
+    return null;
+  }
+}
 
 export default function DashboardPage() {
+  const { role } = useAuth();
   const { data: businesses, isLoading: businessesLoading } = useQuery(
     "businesses",
     () => apiService.getBusinesses(),
     { refetchInterval: 30000 }
   );
+
+  const { data: profile } = useQuery("profile", () => apiService.getProfile(), {
+    enabled: role !== UserRole.PLATFORM_ADMIN,
+  });
 
   const { data: reservations, isLoading: reservationsLoading } = useQuery(
     "reservations",
@@ -29,20 +48,38 @@ export default function DashboardPage() {
     { refetchInterval: 30000 }
   );
 
+  // Filter businesses based on user role
+  const userBusinessId = profile?.business?.id || getBusinessIdFromToken();
+  const availableBusinesses =
+    role === UserRole.PLATFORM_ADMIN
+      ? businesses || []
+      : businesses?.filter((b) => b.id === userBusinessId) || [];
+
+  // Filter reservations and customers for non-platform-admin users
+  const availableReservations =
+    role === UserRole.PLATFORM_ADMIN
+      ? reservations || []
+      : reservations?.filter((r) => r.businessId === userBusinessId) || [];
+
+  const availableCustomers =
+    role === UserRole.PLATFORM_ADMIN
+      ? customers || []
+      : customers || []; // Customers might not have businessId, keep all for now
+
   const isLoading =
     businessesLoading || reservationsLoading || customersLoading;
 
   const stats = [
     {
-      name: "Total de Negocios",
-      value: businesses?.length || 0,
+      name: role === UserRole.PLATFORM_ADMIN ? "Total de Negocios" : "Mi Negocio",
+      value: availableBusinesses.length,
       icon: Building2,
       color: "bg-blue-500",
     },
     {
       name: "Reservaciones Activas",
       value:
-        reservations?.filter(
+        availableReservations?.filter(
           (r) => r.status === "PENDING" || r.status === "CONFIRMED"
         ).length || 0,
       icon: Calendar,
@@ -50,13 +87,13 @@ export default function DashboardPage() {
     },
     {
       name: "Total de Clientes",
-      value: customers?.length || 0,
+      value: availableCustomers?.length || 0,
       icon: UserCheck,
       color: "bg-purple-500",
     },
     {
       name: "Reservaciones Pendientes",
-      value: reservations?.filter((r) => r.status === "PENDING").length || 0,
+      value: availableReservations?.filter((r) => r.status === "PENDING").length || 0,
       icon: Clock,
       color: "bg-yellow-500",
     },
@@ -116,9 +153,9 @@ export default function DashboardPage() {
             </h3>
           </div>
           <div className="card-body">
-            {reservations && reservations.length > 0 ? (
+            {availableReservations && availableReservations.length > 0 ? (
               <div className="space-y-3">
-                {reservations.slice(0, 5).map((reservation) => (
+                {availableReservations.slice(0, 5).map((reservation) => (
                   <div
                     key={reservation.id}
                     className="flex items-center justify-between"
@@ -164,9 +201,9 @@ export default function DashboardPage() {
             </h3>
           </div>
           <div className="card-body">
-            {businesses && businesses.length > 0 ? (
+            {availableBusinesses && availableBusinesses.length > 0 ? (
               <div className="space-y-3">
-                {businesses.slice(0, 5).map((business) => (
+                {availableBusinesses.slice(0, 5).map((business) => (
                   <div
                     key={business.id}
                     className="flex items-center justify-between"
