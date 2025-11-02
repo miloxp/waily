@@ -9,26 +9,66 @@ import {
   Menu,
   X,
   LogOut,
+  CreditCard,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { UserRole } from "../types";
 import { clsx } from "clsx";
 
 interface LayoutProps {
   children: ReactNode;
 }
 
-const navigation = [
-  { name: "Panel Principal", href: "/dashboard", icon: Home },
+const platformAdminNavigation = [
+  { name: "Panel de Plataforma", href: "/platform-admin", icon: Home },
   { name: "Negocios", href: "/businesses", icon: Building2 },
+  { name: "Usuarios", href: "/users", icon: Users },
+  { name: "Suscripciones", href: "/subscriptions", icon: CreditCard },
+];
+
+const businessNavigation = [
+  { name: "Panel Principal", href: "/dashboard", icon: Home },
+  { name: "Reservaciones", href: "/reservations", icon: Calendar },
+  { name: "Lista de Espera", href: "/waitlist", icon: Users },
+  { name: "Clientes", href: "/customers", icon: UserCheck },
+  { name: "Usuarios", href: "/users", icon: Users },
+];
+
+const staffNavigation = [
+  { name: "Panel Principal", href: "/dashboard", icon: Home },
   { name: "Reservaciones", href: "/reservations", icon: Calendar },
   { name: "Lista de Espera", href: "/waitlist", icon: Users },
   { name: "Clientes", href: "/customers", icon: UserCheck },
 ];
 
+function getNavigation(role: UserRole | null) {
+  if (role === UserRole.PLATFORM_ADMIN) {
+    return platformAdminNavigation;
+  } else if (role === UserRole.BUSINESS_OWNER) {
+    return businessNavigation;
+  } else {
+    return staffNavigation;
+  }
+}
+
+function getRoleLabel(role: UserRole | null): string {
+  switch (role) {
+    case UserRole.PLATFORM_ADMIN:
+      return "Administrador de Plataforma";
+    case UserRole.BUSINESS_OWNER:
+      return "Propietario";
+    case UserRole.BUSINESS_STAFF:
+      return "Personal";
+    default:
+      return "Usuario";
+  }
+}
+
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, role, user } = useAuth();
+  const navigation = getNavigation(role);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -45,9 +85,14 @@ export default function Layout({ children }: LayoutProps) {
         />
         <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
           <div className="flex h-16 items-center justify-between px-4">
-            <h1 className="text-xl font-bold text-gray-900">
-              Lista de Espera y Reservaciones
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">
+                Lista de Espera y Reservaciones
+              </h1>
+              {role && (
+                <p className="text-xs text-gray-500">{getRoleLabel(role)}</p>
+              )}
+            </div>
             <button
               onClick={() => setSidebarOpen(false)}
               className="text-gray-400 hover:text-gray-600"
@@ -99,9 +144,14 @@ export default function Layout({ children }: LayoutProps) {
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex h-16 items-center px-4">
-            <h1 className="text-xl font-bold text-gray-900">
-              Lista de Espera y Reservaciones
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">
+                Lista de Espera y Reservaciones
+              </h1>
+              {role && (
+                <p className="text-xs text-gray-500">{getRoleLabel(role)}</p>
+              )}
+            </div>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
             {navigation.map((item) => {
@@ -158,9 +208,16 @@ export default function Layout({ children }: LayoutProps) {
             <div className="flex items-center gap-x-4 lg:gap-x-6">
               <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" />
               <div className="flex items-center gap-x-2">
-                <span className="text-sm text-gray-700">
-                  ¡Bienvenido de nuevo!
-                </span>
+                {user && role && (
+                  <div className="text-right">
+                    <span className="text-sm font-medium text-gray-900">
+                      {user.username}
+                    </span>
+                    <p className="text-xs text-gray-500">
+                      {getRoleLabel(role)}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
