@@ -1,13 +1,16 @@
 package com.waitlist.presentation.controller;
 
 import com.waitlist.domain.entity.Customer;
+import com.waitlist.domain.entity.User;
 import com.waitlist.infrastructure.repository.CustomerRepository;
+import com.waitlist.infrastructure.security.CustomUserDetailsService;
 import com.waitlist.presentation.dto.CustomerDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -25,9 +28,46 @@ public class CustomerController {
     private CustomerRepository customerRepository;
 
     @GetMapping
-    @Operation(summary = "Get all customers", description = "Retrieve all customers")
-    public ResponseEntity<List<CustomerDto>> getAllCustomers() {
-        List<Customer> customers = customerRepository.findAll();
+    @Operation(summary = "Get all customers", description = "Retrieve all customers (filtered by business for non-admin users)")
+    public ResponseEntity<List<CustomerDto>> getAllCustomers(Authentication authentication) {
+        List<Customer> customers;
+        
+        // Check if user is PLATFORM_ADMIN
+        boolean isPlatformAdmin = false;
+        java.util.Set<UUID> userBusinessIds = null;
+        
+        if (authentication != null && authentication.getPrincipal() != null) {
+            try {
+                isPlatformAdmin = authentication.getAuthorities().stream()
+                        .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN"));
+                
+                if (!isPlatformAdmin) {
+                    CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
+                        (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+                    User user = userPrincipal.getUser();
+                    if (user != null && !user.getBusinesses().isEmpty()) {
+                        // Get all business IDs for this user
+                        userBusinessIds = user.getBusinesses().stream()
+                                .map(com.waitlist.domain.entity.Business::getId)
+                                .collect(java.util.stream.Collectors.toSet());
+                    }
+                }
+            } catch (Exception e) {
+                // If we can't get user info, return all customers (default behavior)
+            }
+        }
+        
+        // PLATFORM_ADMIN sees all customers, BUSINESS_OWNER/MANAGER/STAFF only see their businesses' customers
+        if (isPlatformAdmin) {
+            customers = customerRepository.findAll();
+        } else if (userBusinessIds != null && !userBusinessIds.isEmpty()) {
+            // Get customers that have reservations or waitlist entries at any of the user's businesses
+            customers = customerRepository.findCustomersByBusinesses(new java.util.ArrayList<>(userBusinessIds));
+        } else {
+            // Fallback: return all customers if we can't determine business
+            customers = customerRepository.findAll();
+        }
+        
         List<CustomerDto> customerDtos = customers.stream()
                 .map(this::convertToDto)
                 .collect(Collectors.toList());

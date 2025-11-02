@@ -10,7 +10,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import com.waitlist.infrastructure.security.CustomUserDetailsService;
+import com.waitlist.domain.entity.User;
 
 import jakarta.validation.Valid;
 import java.util.List;
@@ -38,12 +42,54 @@ public class BusinessController {
 
     @GetMapping("/{id}")
     @Operation(summary = "Get business details", description = "Retrieve a specific business by ID")
-    public ResponseEntity<BusinessDto> getBusinessDetails(@PathVariable UUID id) {
-        Optional<Business> business = businessRepository.findById(id);
-        if (business.isPresent() && business.get().getIsActive()) {
-            return ResponseEntity.ok(convertToDto(business.get()));
+    public ResponseEntity<BusinessDto> getBusinessDetails(@PathVariable UUID id, Authentication authentication) {
+        try {
+            Optional<Business> business = businessRepository.findById(id);
+            
+            if (business.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            Business businessEntity = business.get();
+            
+            // Check if user is PLATFORM_ADMIN (can view any business)
+            boolean isPlatformAdmin = false;
+            boolean hasAccessToBusiness = false;
+            
+            if (authentication != null && authentication.getPrincipal() != null) {
+                try {
+                    isPlatformAdmin = authentication.getAuthorities().stream()
+                            .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN"));
+                    
+                    if (!isPlatformAdmin) {
+                        CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
+                            (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+                        User user = userPrincipal.getUser();
+                        if (user != null && user.hasBusiness(businessEntity.getId())) {
+                            hasAccessToBusiness = true;
+                        }
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error checking user authorization: " + e.getMessage());
+                }
+            }
+
+            // Allow access if:
+            // 1. Business is active (anyone can view active businesses)
+            // 2. User is PLATFORM_ADMIN (can view any business)
+            // 3. User belongs to this business (can view their own business even if inactive)
+            boolean canAccess = businessEntity.getIsActive() || isPlatformAdmin || hasAccessToBusiness;
+            
+            if (!canAccess) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+            
+            return ResponseEntity.ok(convertToDto(businessEntity));
+        } catch (Exception e) {
+            System.err.println("Error in getBusinessDetails: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        return ResponseEntity.notFound().build();
     }
 
     @GetMapping("/search")
@@ -67,8 +113,8 @@ public class BusinessController {
     }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Create business", description = "Create a new business (Admin only)")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN')")
+    @Operation(summary = "Create business", description = "Create a new business account (Platform Admin only)")
     public ResponseEntity<BusinessDto> createBusiness(@Valid @RequestBody BusinessDto businessDto) {
         if (businessRepository.existsByNameAndIsActiveTrue(businessDto.getName())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
@@ -102,8 +148,8 @@ public class BusinessController {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Delete business", description = "Deactivate a business (Admin only)")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER')")
+    @Operation(summary = "Delete business", description = "Deactivate a business (Platform Admin or Business Owner)")
     public ResponseEntity<Void> deleteBusiness(@PathVariable UUID id) {
         Optional<Business> business = businessRepository.findById(id);
         if (business.isPresent() && business.get().getIsActive()) {
