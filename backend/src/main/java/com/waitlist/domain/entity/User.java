@@ -26,9 +26,13 @@ public class User {
     @Column(unique = true, nullable = false)
     private String email;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "business_id", nullable = false)
-    private Business business;
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "user_businesses",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "business_id")
+    )
+    private java.util.Set<Business> businesses = new java.util.HashSet<>();
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -49,12 +53,21 @@ public class User {
     public User() {
     }
 
+    public User(String username, String password, String email, UserRole role) {
+        this.username = username;
+        this.password = password;
+        this.email = email;
+        this.role = role;
+    }
+
     public User(String username, String password, String email, Business business, UserRole role) {
         this.username = username;
         this.password = password;
         this.email = email;
-        this.business = business;
         this.role = role;
+        if (business != null) {
+            this.businesses.add(business);
+        }
     }
 
     // Getters and Setters
@@ -90,12 +103,43 @@ public class User {
         this.email = email;
     }
 
+    @Deprecated
     public Business getBusiness() {
-        return business;
+        // For backward compatibility, return first business or null
+        return businesses.isEmpty() ? null : businesses.iterator().next();
     }
 
+    @Deprecated
     public void setBusiness(Business business) {
-        this.business = business;
+        // For backward compatibility, replace all businesses with this one
+        this.businesses.clear();
+        if (business != null) {
+            this.businesses.add(business);
+        }
+    }
+
+    public java.util.Set<Business> getBusinesses() {
+        return businesses;
+    }
+
+    public void setBusinesses(java.util.Set<Business> businesses) {
+        this.businesses = businesses != null ? businesses : new java.util.HashSet<>();
+    }
+
+    public void addBusiness(Business business) {
+        if (business != null) {
+            this.businesses.add(business);
+        }
+    }
+
+    public void removeBusiness(Business business) {
+        if (business != null) {
+            this.businesses.remove(business);
+        }
+    }
+
+    public boolean hasBusiness(UUID businessId) {
+        return businesses.stream().anyMatch(b -> b.getId().equals(businessId));
     }
 
     public UserRole getRole() {
@@ -140,7 +184,7 @@ public class User {
     }
 
     public boolean hasAccessToBusiness(UUID businessId) {
-        return isActive && business != null && business.getId().equals(businessId);
+        return isActive && hasBusiness(businessId);
     }
 }
 
