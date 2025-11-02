@@ -18,18 +18,21 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByUsernameAndIsActiveTrue(String username);
 
-    @Query("SELECT u FROM User u JOIN FETCH u.business WHERE u.username = :username AND u.isActive = true")
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.businesses WHERE u.username = :username AND u.isActive = true")
     Optional<User> findByUsernameAndIsActiveTrueWithBusiness(@Param("username") String username);
 
-    @Query("SELECT u FROM User u WHERE u.business.id = :businessId AND u.isActive = true")
+    @Query("SELECT DISTINCT u FROM User u JOIN u.businesses b WHERE b.id = :businessId AND u.isActive = true")
     java.util.List<User> findByBusinessIdAndIsActiveTrue(@Param("businessId") UUID businessId);
 
     boolean existsByUsername(String username);
 
     boolean existsByEmail(String email);
 
-    @Query("SELECT u FROM User u WHERE u.business.id = :businessId AND u.username = :username AND u.isActive = true")
+    @Query("SELECT DISTINCT u FROM User u JOIN u.businesses b WHERE b.id = :businessId AND u.username = :username AND u.isActive = true")
     Optional<User> findByBusinessIdAndUsernameAndIsActiveTrue(@Param("businessId") UUID businessId,
             @Param("username") String username);
+
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.businesses")
+    java.util.List<User> findAllWithBusinesses();
 }
 

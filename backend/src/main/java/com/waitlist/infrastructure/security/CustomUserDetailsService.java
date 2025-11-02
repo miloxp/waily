@@ -12,7 +12,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 public class CustomUserDetailsService implements UserDetailsService {
@@ -74,8 +76,19 @@ public class CustomUserDetailsService implements UserDetailsService {
             return user;
         }
 
+        @Deprecated
         public UUID getBusinessId() {
-            return user.getBusiness().getId();
+            // For backward compatibility, return first business ID or null
+            if (user.getBusinesses().isEmpty()) {
+                return null;
+            }
+            return user.getBusinesses().iterator().next().getId();
+        }
+
+        public Set<UUID> getBusinessIds() {
+            return user.getBusinesses().stream()
+                    .map(com.waitlist.domain.entity.Business::getId)
+                    .collect(Collectors.toSet());
         }
     }
 }

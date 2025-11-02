@@ -66,9 +66,22 @@ public class AuthController {
                             loginRequest.getPassword()));
 
             UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-            String token = jwtUtil.generateToken(userDetails.getUsername());
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
+                (CustomUserDetailsService.CustomUserPrincipal) userDetails;
+            User user = userPrincipal.getUser();
 
             Map<String, Object> claims = new HashMap<>();
+            claims.put("userId", user.getId());
+            // Include all business IDs for the user
+            java.util.List<java.util.UUID> businessIds = user.getBusinesses().stream()
+                    .map(com.waitlist.domain.entity.Business::getId)
+                    .collect(java.util.stream.Collectors.toList());
+            claims.put("businessIds", businessIds);
+            // For backward compatibility, also include first business ID if available
+            if (!businessIds.isEmpty()) {
+                claims.put("businessId", businessIds.get(0));
+            }
+            claims.put("role", user.getRole().name());
             claims.put("roles", userDetails.getAuthorities());
             String tokenWithClaims = jwtUtil.generateToken(userDetails.getUsername(), claims);
 
@@ -123,7 +136,15 @@ public class AuthController {
             // Generate JWT token
             Map<String, Object> claims = new HashMap<>();
             claims.put("userId", savedUser.getId());
-            claims.put("businessId", savedBusiness.getId());
+            // Include all business IDs for the user
+            java.util.List<java.util.UUID> businessIds = savedUser.getBusinesses().stream()
+                    .map(com.waitlist.domain.entity.Business::getId)
+                    .collect(java.util.stream.Collectors.toList());
+            claims.put("businessIds", businessIds);
+            // For backward compatibility, also include first business ID if available
+            if (!businessIds.isEmpty()) {
+                claims.put("businessId", businessIds.get(0));
+            }
             claims.put("role", savedUser.getRole().name());
 
             String token = jwtUtil.generateToken(savedUser.getUsername(), claims);
@@ -158,12 +179,15 @@ public class AuthController {
             User user = userPrincipal.getUser();
             logger.debug("Found user: {}", user.getUsername());
 
+            // Get first business for backward compatibility (UserProfileDto still expects single business)
+            com.waitlist.domain.entity.Business firstBusiness = user.getBusinesses().isEmpty() ? null : user.getBusinesses().iterator().next();
+
             UserProfileDto profile = new UserProfileDto(
                     user.getId(),
                     user.getUsername(),
                     user.getEmail(),
                     user.getRole().name(),
-                    convertBusinessToDto(user.getBusiness()),
+                    firstBusiness != null ? convertBusinessToDto(firstBusiness) : null,
                     user.getIsActive(),
                     user.getCreatedAt(),
                     user.getUpdatedAt());
