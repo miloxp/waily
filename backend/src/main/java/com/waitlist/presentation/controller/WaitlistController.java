@@ -5,6 +5,7 @@ import com.waitlist.application.dto.AddCustomerToWaitlistResponse;
 import com.waitlist.application.usecase.AddCustomerToWaitlistUseCase;
 import com.waitlist.domain.entity.Business;
 import com.waitlist.domain.entity.Customer;
+import com.waitlist.domain.entity.User;
 import com.waitlist.domain.entity.WaitlistEntry;
 import com.waitlist.domain.entity.WaitlistStatus;
 import com.waitlist.domain.service.SmsService;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.security.core.Authentication;
 
@@ -69,10 +71,78 @@ public class WaitlistController {
         }
     }
 
+    @GetMapping("/business/{businessId}")
+    @Operation(summary = "Get waitlist entries for a business", description = "Get all active waitlist entries for a specific business")
+    public ResponseEntity<List<WaitlistEntryDto>> getWaitlistByBusiness(
+            @PathVariable UUID businessId,
+            Authentication authentication) {
+        try {
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
+
+            // Check if user is PLATFORM_ADMIN
+            boolean isPlatformAdmin = authentication.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN"));
+
+            // Allow PLATFORM_ADMIN to access any business
+            if (isPlatformAdmin) {
+                // Verify business exists
+                Optional<Business> business = businessRepository.findById(businessId);
+                if (business.isEmpty()) {
+                    return ResponseEntity.notFound().build();
+                }
+
+                List<WaitlistEntry> entries = waitlistEntryRepository.findActiveWaitlistEntries(businessId);
+                List<WaitlistEntryDto> entryDtos = entries.stream()
+                        .map(this::convertToDto)
+                        .collect(Collectors.toList());
+                return ResponseEntity.ok(entryDtos);
+            }
+
+            // For business users, check if they belong to the requested business
+            User user = userPrincipal.getUser();
+
+            // Check if user has access to this business
+            if (!user.hasBusiness(businessId)) {
+                System.err.println("Access denied - User " + userPrincipal.getUsername()
+                        + " does not have access to business: " + businessId);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
+            // Verify business exists and is active
+            Optional<Business> business = businessRepository.findById(businessId);
+            if (business.isEmpty() || !business.get().getIsActive()) {
+                return ResponseEntity.notFound().build();
+            }
+
+            List<WaitlistEntry> entries = waitlistEntryRepository.findActiveWaitlistEntries(businessId);
+            List<WaitlistEntryDto> entryDtos = entries.stream()
+                    .map(this::convertToDto)
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(entryDtos);
+        } catch (Exception e) {
+            System.err.println("Error in getWaitlistByBusiness: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/business/{businessId}/stats")
+    @Operation(summary = "Get waitlist statistics", description = "Get waitlist statistics for a business")
+    public ResponseEntity<Object> getWaitlistStats(@PathVariable UUID businessId) {
+        long waitingCount = waitlistEntryRepository.countWaitingEntries(businessId);
+        long activeCount = waitlistEntryRepository.countActiveEntries(businessId);
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("waitingCount", waitingCount);
+        stats.put("activeCount", activeCount);
+        return ResponseEntity.ok(stats);
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Get waitlist entry by ID", description = "Retrieve a specific waitlist entry by ID")
     public ResponseEntity<WaitlistEntryDto> getWaitlistEntryById(@PathVariable UUID id) {
-        Optional<WaitlistEntry> entry = waitlistEntryRepository.findById(id);
+        Optional<WaitlistEntry> entry = waitlistEntryRepository.findByIdWithBusinessAndCustomer(id);
         if (entry.isPresent()) {
             return ResponseEntity.ok(convertToDto(entry.get()));
         }
@@ -105,42 +175,104 @@ public class WaitlistController {
     }
 
     @PutMapping("/{id}/notify")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('BUSINESS_OWNER')")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER') or hasRole('BUSINESS_STAFF')")
     @Operation(summary = "Notify customer", description = "Notify customer that their table is ready")
-    public ResponseEntity<WaitlistEntryDto> notifyCustomer(@PathVariable UUID id) {
-        Optional<WaitlistEntry> entry = waitlistEntryRepository.findById(id);
-        if (entry.isPresent() && entry.get().canBeNotified()) {
-            entry.get().notifyCustomer();
-            WaitlistEntry savedEntry = waitlistEntryRepository.save(entry.get());
+    @Transactional
+    public ResponseEntity<WaitlistEntryDto> notifyCustomer(@PathVariable UUID id, Authentication authentication) {
+        try {
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
+            User currentUser = userPrincipal.getUser();
 
-            // Send SMS notification
-            smsService.sendTableReadyNotification(
-                    entry.get().getCustomer().getPhone(),
-                    entry.get().getBusiness().getName(),
-                    entry.get().getBusiness().getPhone());
+            Optional<WaitlistEntry> entry = waitlistEntryRepository.findByIdWithBusinessAndCustomer(id);
+            if (entry.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
 
-            return ResponseEntity.ok(convertToDto(savedEntry));
+            WaitlistEntry waitlistEntry = entry.get();
+            UUID businessId = waitlistEntry.getBusiness().getId();
+
+            // Check if user has access to this business
+            boolean isPlatformAdmin = authentication.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN"));
+
+            if (!isPlatformAdmin && !currentUser.hasBusiness(businessId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
+            if (waitlistEntry.canBeNotified()) {
+                // Access entities before saving to ensure they're loaded
+                Business business = waitlistEntry.getBusiness();
+                Customer customer = waitlistEntry.getCustomer();
+                String customerPhone = customer.getPhone();
+                String businessName = business.getName();
+                String businessPhone = business.getPhone();
+
+                waitlistEntry.notifyCustomer();
+                WaitlistEntry savedEntry = waitlistEntryRepository.save(waitlistEntry);
+
+                // Send SMS notification using the loaded values
+                smsService.sendTableReadyNotification(customerPhone, businessName, businessPhone);
+
+                // Reload with relationships for DTO conversion
+                WaitlistEntry entryForDto = waitlistEntryRepository.findByIdWithBusinessAndCustomer(savedEntry.getId())
+                        .orElse(savedEntry);
+                return ResponseEntity.ok(convertToDto(entryForDto));
+            }
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            System.err.println("Error in notifyCustomer: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        return ResponseEntity.badRequest().build();
     }
 
     @PutMapping("/{id}/seat")
-    @PreAuthorize("hasRole('ADMIN') or hasRole('BUSINESS_OWNER')")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER') or hasRole('BUSINESS_STAFF')")
     @Operation(summary = "Seat customer", description = "Mark customer as seated")
-    public ResponseEntity<WaitlistEntryDto> seatCustomer(@PathVariable UUID id) {
-        Optional<WaitlistEntry> entry = waitlistEntryRepository.findById(id);
-        if (entry.isPresent() && entry.get().canBeSeated()) {
-            entry.get().seatCustomer();
-            WaitlistEntry savedEntry = waitlistEntryRepository.save(entry.get());
+    @Transactional
+    public ResponseEntity<WaitlistEntryDto> seatCustomer(@PathVariable UUID id, Authentication authentication) {
+        try {
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
+            User currentUser = userPrincipal.getUser();
 
-            // Update positions of remaining customers
-            waitlistEntryRepository.updatePositionsAfterRemoval(
-                    entry.get().getBusiness().getId(),
-                    entry.get().getPosition());
+            Optional<WaitlistEntry> entry = waitlistEntryRepository.findByIdWithBusinessAndCustomer(id);
+            if (entry.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
 
-            return ResponseEntity.ok(convertToDto(savedEntry));
+            WaitlistEntry waitlistEntry = entry.get();
+            UUID businessId = waitlistEntry.getBusiness().getId();
+
+            // Check if user has access to this business
+            boolean isPlatformAdmin = authentication.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN"));
+
+            if (!isPlatformAdmin && !currentUser.hasBusiness(businessId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
+            if (waitlistEntry.canBeSeated()) {
+                waitlistEntry.seatCustomer();
+                WaitlistEntry savedEntry = waitlistEntryRepository.save(waitlistEntry);
+
+                // Update positions of remaining customers
+                waitlistEntryRepository.updatePositionsAfterRemoval(
+                        waitlistEntry.getBusiness().getId(),
+                        waitlistEntry.getPosition());
+
+                // Reload with relationships for DTO conversion
+                WaitlistEntry entryForDto = waitlistEntryRepository.findByIdWithBusinessAndCustomer(savedEntry.getId())
+                        .orElse(savedEntry);
+                return ResponseEntity.ok(convertToDto(entryForDto));
+            }
+            return ResponseEntity.badRequest().build();
+        } catch (Exception e) {
+            System.err.println("Error in seatCustomer: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        return ResponseEntity.badRequest().build();
     }
 
     @PatchMapping("/{id}/status")
@@ -240,19 +372,12 @@ public class WaitlistController {
         }
     }
 
-    @GetMapping("/business/{businessId}/stats")
-    @Operation(summary = "Get waitlist statistics", description = "Get waitlist statistics for a business")
-    public ResponseEntity<Object> getWaitlistStats(@PathVariable UUID businessId) {
-        long waitingCount = waitlistEntryRepository.countWaitingEntries(businessId);
-        long activeCount = waitlistEntryRepository.countActiveEntries(businessId);
-
-        Map<String, Object> stats = new HashMap<>();
-        stats.put("waitingCount", waitingCount);
-        stats.put("activeCount", activeCount);
-        return ResponseEntity.ok(stats);
-    }
-
     private WaitlistEntryDto convertToDto(WaitlistEntry entry) {
+        // Ensure relationships are loaded
+        if (entry.getBusiness() == null || entry.getCustomer() == null) {
+            throw new IllegalStateException("WaitlistEntry must have business and customer loaded");
+        }
+
         WaitlistEntryDto dto = new WaitlistEntryDto(
                 entry.getId(),
                 entry.getBusiness().getId(),
