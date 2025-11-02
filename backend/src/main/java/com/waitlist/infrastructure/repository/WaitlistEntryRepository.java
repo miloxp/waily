@@ -62,5 +62,8 @@ public interface WaitlistEntryRepository extends JpaRepository<WaitlistEntry, UU
                         "ORDER BY w.position ASC")
         List<WaitlistEntry> findWaitingEntriesByPartySize(@Param("businessId") UUID businessId,
                         @Param("maxPartySize") Integer maxPartySize);
+
+        @Query("SELECT w FROM WaitlistEntry w JOIN FETCH w.business JOIN FETCH w.customer WHERE w.id = :id")
+        Optional<WaitlistEntry> findByIdWithBusinessAndCustomer(@Param("id") UUID id);
 }
 
