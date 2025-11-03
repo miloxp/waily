@@ -1,10 +1,15 @@
 package com.waitlist.presentation.controller;
 
+import com.waitlist.domain.entity.Business;
 import com.waitlist.domain.entity.Customer;
 import com.waitlist.domain.entity.User;
+import com.waitlist.domain.entity.UserRole;
+import com.waitlist.infrastructure.repository.BusinessRepository;
 import com.waitlist.infrastructure.repository.CustomerRepository;
 import com.waitlist.infrastructure.security.CustomUserDetailsService;
 import com.waitlist.presentation.dto.CustomerDto;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.transaction.annotation.Transactional;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,50 +33,45 @@ public class CustomerController {
     private CustomerRepository customerRepository;
 
     @GetMapping
-    @Operation(summary = "Get all customers", description = "Retrieve all customers (filtered by business for non-admin users)")
+    @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER') or hasRole('BUSINESS_STAFF')")
+    @Operation(summary = "Get all customers", description = "Retrieve all customers (Platform Admin sees all, business users see their business's customers)")
+    @Transactional(readOnly = true)
     public ResponseEntity<List<CustomerDto>> getAllCustomers(Authentication authentication) {
-        List<Customer> customers;
-        
-        // Check if user is PLATFORM_ADMIN
-        boolean isPlatformAdmin = false;
-        java.util.Set<UUID> userBusinessIds = null;
-        
-        if (authentication != null && authentication.getPrincipal() != null) {
-            try {
-                isPlatformAdmin = authentication.getAuthorities().stream()
-                        .anyMatch(a -> a.getAuthority().equals("ROLE_PLATFORM_ADMIN"));
+        try {
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
+                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            User currentUser = userPrincipal.getUser();
+            UserRole currentUserRole = currentUser.getRole();
+
+            List<Customer> customers;
+            
+            if (currentUserRole == UserRole.PLATFORM_ADMIN) {
+                // PLATFORM_ADMIN sees all customers
+                customers = customerRepository.findAllWithBusinesses();
+            } else {
+                // Business users see only customers associated with their businesses
+                java.util.Set<Business> userBusinesses = currentUser.getBusinesses();
                 
-                if (!isPlatformAdmin) {
-                    CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-                        (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
-                    User user = userPrincipal.getUser();
-                    if (user != null && !user.getBusinesses().isEmpty()) {
-                        // Get all business IDs for this user
-                        userBusinessIds = user.getBusinesses().stream()
-                                .map(com.waitlist.domain.entity.Business::getId)
-                                .collect(java.util.stream.Collectors.toSet());
-                    }
+                if (userBusinesses.isEmpty()) {
+                    customers = new java.util.ArrayList<>();
+                } else {
+                    java.util.List<UUID> businessIds = userBusinesses.stream()
+                            .map(Business::getId)
+                            .collect(Collectors.toList());
+                    
+                    customers = customerRepository.findCustomersByBusinessIds(businessIds);
                 }
-            } catch (Exception e) {
-                // If we can't get user info, return all customers (default behavior)
             }
+            
+            List<CustomerDto> customerDtos = customers.stream()
+                    .map(this::convertToDto)
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(customerDtos);
+        } catch (Exception e) {
+            System.err.println("Error in getAllCustomers: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-        
-        // PLATFORM_ADMIN sees all customers, BUSINESS_OWNER/MANAGER/STAFF only see their businesses' customers
-        if (isPlatformAdmin) {
-            customers = customerRepository.findAll();
-        } else if (userBusinessIds != null && !userBusinessIds.isEmpty()) {
-            // Get customers that have reservations or waitlist entries at any of the user's businesses
-            customers = customerRepository.findCustomersByBusinesses(new java.util.ArrayList<>(userBusinessIds));
-        } else {
-            // Fallback: return all customers if we can't determine business
-            customers = customerRepository.findAll();
-        }
-        
-        List<CustomerDto> customerDtos = customers.stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(customerDtos);
     }
 
     @GetMapping("/{id}")
@@ -105,16 +105,62 @@ public class CustomerController {
     }
 
     @PostMapping
-    @Operation(summary = "Create customer", description = "Create a new customer")
-    public ResponseEntity<CustomerDto> createCustomer(@Valid @RequestBody CustomerDto customerDto) {
-        // Check if customer with phone already exists
-        if (customerRepository.existsByPhone(customerDto.getPhone())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+    @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER') or hasRole('BUSINESS_STAFF')")
+    @Operation(summary = "Create customer", description = "Create a new customer and associate with user's business")
+    @Transactional
+    public ResponseEntity<CustomerDto> createCustomer(
+            @Valid @RequestBody CustomerDto customerDto,
+            Authentication authentication) {
+        try {
+            // Get current user's business
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
+                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            User currentUser = userPrincipal.getUser();
+            java.util.Set<Business> userBusinesses = currentUser.getBusinesses();
 
-        Customer customer = convertToEntity(customerDto);
-        Customer savedCustomer = customerRepository.save(customer);
-        return ResponseEntity.status(HttpStatus.CREATED).body(convertToDto(savedCustomer));
+            if (userBusinesses.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+            }
+
+            // Check if customer with phone already exists
+            Optional<Customer> existingCustomerOpt = customerRepository.findByPhone(customerDto.getPhone());
+            Customer customer;
+            
+            if (existingCustomerOpt.isPresent()) {
+                // Customer exists, just add business association
+                customer = existingCustomerOpt.get();
+                
+                // Add all user's businesses to the customer if not already associated
+                for (Business business : userBusinesses) {
+                    if (!customer.hasBusiness(business.getId())) {
+                        customer.addBusiness(business);
+                    }
+                }
+            } else {
+                // Create new customer
+                customer = convertToEntity(customerDto);
+                
+                // Associate customer with all user's businesses
+                for (Business business : userBusinesses) {
+                    customer.addBusiness(business);
+                }
+            }
+
+            Customer savedCustomer = customerRepository.save(customer);
+            customerRepository.flush(); // Ensure relationships are persisted
+            
+            // Reload customer with businesses
+            Customer customerWithBusinesses = customerRepository.findAllWithBusinesses().stream()
+                    .filter(c -> c.getId().equals(savedCustomer.getId()))
+                    .findFirst()
+                    .orElse(savedCustomer);
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(convertToDto(customerWithBusinesses));
+        } catch (Exception e) {
+            System.err.println("Error in createCustomer: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
     }
 
     @PutMapping("/{id}")
@@ -134,26 +180,66 @@ public class CustomerController {
     }
 
     @PostMapping("/find-or-create")
-    @Operation(summary = "Find or create customer", description = "Find existing customer by phone or create new one")
-    public ResponseEntity<CustomerDto> findOrCreateCustomer(@Valid @RequestBody CustomerDto customerDto) {
-        Optional<Customer> existingCustomer = customerRepository.findByPhone(customerDto.getPhone());
+    @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER') or hasRole('BUSINESS_STAFF')")
+    @Operation(summary = "Find or create customer", description = "Find existing customer by phone or create new one and associate with user's business")
+    @Transactional
+    public ResponseEntity<CustomerDto> findOrCreateCustomer(
+            @Valid @RequestBody CustomerDto customerDto,
+            Authentication authentication) {
+        try {
+            // Get current user's business
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
+                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            User currentUser = userPrincipal.getUser();
+            java.util.Set<Business> userBusinesses = currentUser.getBusinesses();
 
-        if (existingCustomer.isPresent()) {
-            // Update existing customer if new information is provided
-            Customer customer = existingCustomer.get();
-            if (customerDto.getName() != null && !customerDto.getName().trim().isEmpty()) {
-                customer.setName(customerDto.getName());
+            if (userBusinesses.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
-            if (customerDto.getEmail() != null && !customerDto.getEmail().trim().isEmpty()) {
-                customer.setEmail(customerDto.getEmail());
+
+            Optional<Customer> existingCustomerOpt = customerRepository.findByPhone(customerDto.getPhone());
+
+            Customer customer;
+            if (existingCustomerOpt.isPresent()) {
+                // Update existing customer if new information is provided
+                customer = existingCustomerOpt.get();
+                if (customerDto.getName() != null && !customerDto.getName().trim().isEmpty()) {
+                    customer.setName(customerDto.getName());
+                }
+                if (customerDto.getEmail() != null && !customerDto.getEmail().trim().isEmpty()) {
+                    customer.setEmail(customerDto.getEmail());
+                }
+                
+                // Add business association if not already present
+                for (Business business : userBusinesses) {
+                    if (!customer.hasBusiness(business.getId())) {
+                        customer.addBusiness(business);
+                    }
+                }
+            } else {
+                // Create new customer
+                customer = convertToEntity(customerDto);
+                
+                // Associate customer with all user's businesses
+                for (Business business : userBusinesses) {
+                    customer.addBusiness(business);
+                }
             }
+            
             Customer savedCustomer = customerRepository.save(customer);
-            return ResponseEntity.ok(convertToDto(savedCustomer));
-        } else {
-            // Create new customer
-            Customer customer = convertToEntity(customerDto);
-            Customer savedCustomer = customerRepository.save(customer);
-            return ResponseEntity.status(HttpStatus.CREATED).body(convertToDto(savedCustomer));
+            customerRepository.flush();
+            
+            // Reload customer with businesses
+            Customer customerWithBusinesses = customerRepository.findAllWithBusinesses().stream()
+                    .filter(c -> c.getId().equals(savedCustomer.getId()))
+                    .findFirst()
+                    .orElse(savedCustomer);
+            
+            return ResponseEntity.ok(convertToDto(customerWithBusinesses));
+        } catch (Exception e) {
+            System.err.println("Error in findOrCreateCustomer: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
     }
 
