@@ -49,10 +49,10 @@ function App() {
           <Route path="/platform-admin" element={<PlatformAdminPage />} />
         )}
         {role !== UserRole.PLATFORM_ADMIN && (
-          <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         )}
         {(role === UserRole.PLATFORM_ADMIN || role === UserRole.BUSINESS_OWNER) && (
-          <Route path="/businesses" element={<BusinessesPage />} />
+        <Route path="/businesses" element={<BusinessesPage />} />
         )}
         {role === UserRole.PLATFORM_ADMIN && (
           <Route path="/subscriptions" element={<SubscriptionsPage />} />

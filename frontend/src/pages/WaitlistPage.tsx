@@ -151,15 +151,15 @@ export default function WaitlistPage() {
             disabled={availableBusinesses.length === 0}
           >
             {role === UserRole.PLATFORM_ADMIN && (
-              <option value="">Elige un negocio...</option>
+            <option value="">Elige un negocio...</option>
             )}
             {availableBusinesses.length === 0 ? (
               <option value="">No hay negocios disponibles</option>
             ) : (
               availableBusinesses.map((business) => (
-                <option key={business.id} value={business.id}>
-                  {business.name}
-                </option>
+              <option key={business.id} value={business.id}>
+                {business.name}
+              </option>
               ))
             )}
           </select>
@@ -302,9 +302,9 @@ export default function WaitlistPage() {
                           </span>
                         </div>
                       </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <div className="flex space-x-2">
-                      {entry.status === WaitlistStatus.WAITING && (
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                        <div className="flex space-x-2">
+                          {entry.status === WaitlistStatus.WAITING && (
                         <button
                           onClick={async () => {
                             try {
@@ -317,10 +317,10 @@ export default function WaitlistPage() {
                           }}
                           className="text-blue-600 hover:text-blue-900"
                         >
-                          Notificar
-                        </button>
-                      )}
-                      {entry.status === WaitlistStatus.NOTIFIED && (
+                              Notificar
+                            </button>
+                          )}
+                          {entry.status === WaitlistStatus.NOTIFIED && (
                         <button
                           onClick={async () => {
                             try {
@@ -333,9 +333,9 @@ export default function WaitlistPage() {
                           }}
                           className="text-green-600 hover:text-green-900"
                         >
-                          Sentar
-                        </button>
-                      )}
+                              Sentar
+                            </button>
+                          )}
                       <button
                         onClick={async () => {
                           if (window.confirm("¿Cancelar esta entrada de la lista de espera?")) {
@@ -350,10 +350,10 @@ export default function WaitlistPage() {
                         }}
                         className="text-red-600 hover:text-red-900"
                       >
-                        Cancelar
-                      </button>
-                    </div>
-                  </td>
+                            Cancelar
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

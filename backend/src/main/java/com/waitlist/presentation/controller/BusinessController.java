@@ -44,7 +44,7 @@ public class BusinessController {
     @Operation(summary = "Get business details", description = "Retrieve a specific business by ID")
     public ResponseEntity<BusinessDto> getBusinessDetails(@PathVariable UUID id, Authentication authentication) {
         try {
-            Optional<Business> business = businessRepository.findById(id);
+        Optional<Business> business = businessRepository.findById(id);
             
             if (business.isEmpty()) {
                 return ResponseEntity.notFound().build();

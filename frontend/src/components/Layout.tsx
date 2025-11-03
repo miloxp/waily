@@ -86,9 +86,9 @@ export default function Layout({ children }: LayoutProps) {
         <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
           <div className="flex h-16 items-center justify-between px-4">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                Lista de Espera y Reservaciones
-              </h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              Lista de Espera y Reservaciones
+            </h1>
               {role && (
                 <p className="text-xs text-gray-500">{getRoleLabel(role)}</p>
               )}
@@ -145,9 +145,9 @@ export default function Layout({ children }: LayoutProps) {
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex h-16 items-center px-4">
             <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                Lista de Espera y Reservaciones
-              </h1>
+            <h1 className="text-xl font-bold text-gray-900">
+              Lista de Espera y Reservaciones
+            </h1>
               {role && (
                 <p className="text-xs text-gray-500">{getRoleLabel(role)}</p>
               )}
@@ -212,7 +212,7 @@ export default function Layout({ children }: LayoutProps) {
                   <div className="text-right">
                     <span className="text-sm font-medium text-gray-900">
                       {user.username}
-                    </span>
+                </span>
                     <p className="text-xs text-gray-500">
                       {getRoleLabel(role)}
                     </p>
