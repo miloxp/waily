@@ -57,9 +57,42 @@ public class UserBusinessMigration {
                     "SELECT id, business_id FROM users WHERE business_id IS NOT NULL"
                 );
 
-                // Note: We're not dropping the business_id column yet to maintain backward compatibility
-                // The column can be removed in a future migration if needed
-                logger.info("Migration completed successfully. Old business_id column kept for compatibility.");
+                // Remove NOT NULL constraint from business_id column to allow NULL values
+                // This is necessary because we're now using the user_businesses join table
+                logger.info("Removing NOT NULL constraint from business_id column");
+                try {
+                    // Check if the constraint exists first
+                    Integer constraintExists = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.table_constraints " +
+                        "WHERE table_name = 'users' AND constraint_name = 'users_business_id_fkey'",
+                        Integer.class
+                    );
+                    
+                    if (constraintExists != null && constraintExists > 0) {
+                        // Drop the foreign key constraint first
+                        jdbcTemplate.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_business_id_fkey");
+                    }
+                    
+                    // Check if column has NOT NULL constraint
+                    Integer hasNotNull = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM information_schema.columns " +
+                        "WHERE table_name = 'users' AND column_name = 'business_id' AND is_nullable = 'NO'",
+                        Integer.class
+                    );
+                    
+                    if (hasNotNull != null && hasNotNull > 0) {
+                        // Remove NOT NULL constraint
+                        jdbcTemplate.execute("ALTER TABLE users ALTER COLUMN business_id DROP NOT NULL");
+                        logger.info("Successfully removed NOT NULL constraint from business_id column");
+                    } else {
+                        logger.info("business_id column already allows NULL values");
+                    }
+                } catch (Exception e) {
+                    logger.warn("Could not modify business_id constraint: {}", e.getMessage());
+                    // Continue - column might not exist or already be nullable
+                }
+
+                logger.info("Migration completed successfully. business_id column now allows NULL values.");
             } else {
                 logger.info("user_businesses table already exists");
             }

@@ -45,5 +45,11 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
            "WHERE c.id IN (SELECT DISTINCT r.customer.id FROM Reservation r WHERE r.business.id IN :businessIds) " +
            "OR c.id IN (SELECT DISTINCT w.customer.id FROM WaitlistEntry w WHERE w.business.id IN :businessIds)")
     List<Customer> findCustomersByBusinesses(@Param("businessIds") java.util.List<UUID> businessIds);
+
+    @Query("SELECT DISTINCT c FROM Customer c JOIN FETCH c.businesses b WHERE b.id IN :businessIds")
+    List<Customer> findCustomersByBusinessIds(@Param("businessIds") java.util.List<UUID> businessIds);
+
+    @Query("SELECT DISTINCT c FROM Customer c LEFT JOIN FETCH c.businesses")
+    List<Customer> findAllWithBusinesses();
 }
 

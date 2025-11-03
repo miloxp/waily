@@ -34,5 +34,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.businesses")
     java.util.List<User> findAllWithBusinesses();
-}
 
+    @Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.businesses WHERE u.id = :id")
+    Optional<User> findByIdWithBusinesses(@Param("id") UUID id);
+}

@@ -26,6 +26,14 @@ public class Customer {
     @Column(name = "email", length = 255)
     private String email;
 
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "customer_businesses",
+        joinColumns = @JoinColumn(name = "customer_id"),
+        inverseJoinColumns = @JoinColumn(name = "business_id")
+    )
+    private java.util.Set<Business> businesses = new java.util.HashSet<>();
+
     @CreatedDate
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -105,6 +113,31 @@ public class Customer {
 
     public boolean hasValidPhone() {
         return phone != null && !phone.trim().isEmpty() && phone.matches("^\\+?[1-9]\\d{1,14}$");
+    }
+
+    // Business relationship methods
+    public java.util.Set<Business> getBusinesses() {
+        return businesses;
+    }
+
+    public void setBusinesses(java.util.Set<Business> businesses) {
+        this.businesses = businesses != null ? businesses : new java.util.HashSet<>();
+    }
+
+    public void addBusiness(Business business) {
+        if (business != null) {
+            this.businesses.add(business);
+        }
+    }
+
+    public void removeBusiness(Business business) {
+        if (business != null) {
+            this.businesses.remove(business);
+        }
+    }
+
+    public boolean hasBusiness(UUID businessId) {
+        return businesses.stream().anyMatch(b -> b.getId().equals(businessId));
     }
 }
 

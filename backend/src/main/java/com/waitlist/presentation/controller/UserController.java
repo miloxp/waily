@@ -18,6 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import com.waitlist.infrastructure.security.CustomUserDetailsService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 
 import jakarta.validation.Valid;
 import java.util.List;
@@ -39,6 +41,9 @@ public class UserController {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @PersistenceContext
+    private EntityManager entityManager;
+
     @GetMapping
     @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER')")
     @Operation(summary = "Get all users", description = "Retrieve all users (Platform Admin sees all, Business Owner sees their staff)")
@@ -46,8 +51,8 @@ public class UserController {
     public ResponseEntity<List<UserDto>> getAllUsers(Authentication authentication) {
         try {
             // Get current user
-            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
             User currentUser = userPrincipal.getUser();
             UserRole currentUserRole = currentUser.getRole();
 
@@ -74,7 +79,7 @@ public class UserController {
             } else {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
-            
+
             // Remove duplicates that might occur from LEFT JOIN FETCH
             java.util.Map<UUID, User> uniqueUsersMap = new java.util.LinkedHashMap<>();
             for (User user : users) {
@@ -89,19 +94,20 @@ public class UserController {
                         for (Business business : businesses) {
                             business.getId(); // Ensure business is fully loaded
                             business.getName(); // Ensure name is loaded
-                            System.out.println("  - Business: " + business.getName() + " (ID: " + business.getId() + ")");
+                            System.out
+                                    .println("  - Business: " + business.getName() + " (ID: " + business.getId() + ")");
                         }
                     } else {
                         System.out.println("User " + user.getUsername() + " has null businesses");
                     }
                 }
             }
-            
+
             // Convert to DTOs
             List<UserDto> userDtos = uniqueUsersMap.values().stream()
                     .map(this::convertToDto)
                     .collect(Collectors.toList());
-            
+
             System.out.println("Returning " + userDtos.size() + " users");
             return ResponseEntity.ok(userDtos);
         } catch (Exception e) {
@@ -145,88 +151,140 @@ public class UserController {
     @Transactional
     @Operation(summary = "Create user", description = "Create a new user (Platform Admin or Business Owner)")
     public ResponseEntity<UserDto> createUser(@Valid @RequestBody CreateUserRequest createUserRequest,
-                                               Authentication authentication) {
-        // Get current user
-        CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-            (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
-        User currentUser = userPrincipal.getUser();
-        UserRole currentUserRole = currentUser.getRole();
-
-        // Role-based validation
-        if (currentUserRole == UserRole.PLATFORM_ADMIN) {
-            // PLATFORM_ADMIN can only create BUSINESS_OWNER
-            if (createUserRequest.getRole() != UserRole.BUSINESS_OWNER) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(null); // Or create an error DTO
-            }
-        } else if (currentUserRole == UserRole.BUSINESS_OWNER) {
-            // BUSINESS_OWNER can only create BUSINESS_STAFF
-            if (createUserRequest.getRole() != UserRole.BUSINESS_STAFF) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(null);
-            }
-
-            // Check limit: BUSINESS_OWNER can only create max 3 BUSINESS_STAFF
-            // Count existing BUSINESS_STAFF users for businesses owned by current user
-            int existingStaffCount = 0;
-            for (Business ownedBusiness : currentUser.getBusinesses()) {
-                List<User> staffUsers = userRepository.findByBusinessIdAndIsActiveTrue(ownedBusiness.getId());
-                existingStaffCount += (int) staffUsers.stream()
-                    .filter(u -> u.getRole() == UserRole.BUSINESS_STAFF)
-                    .count();
-            }
-
-            if (existingStaffCount >= 3) {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                    .body(null); // Max limit reached
-            }
-
-            // BUSINESS_OWNER can only assign their own businesses
-            for (UUID businessId : createUserRequest.getBusinessIds()) {
-                if (!currentUser.hasBusiness(businessId)) {
-                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(null); // Trying to assign a business they don't own
-                }
-            }
-        } else {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-        }
-
-        // Check if username already exists
-        if (userRepository.existsByUsername(createUserRequest.getUsername())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
-
-        // Check if email already exists
-        if (userRepository.existsByEmail(createUserRequest.getEmail())) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
-
-        // Validate that all businesses exist
-        for (UUID businessId : createUserRequest.getBusinessIds()) {
-            Optional<Business> business = businessRepository.findById(businessId);
-            if (business.isEmpty()) {
+            Authentication authentication) {
+        try {
+            // Validate businessIds is not null or empty
+            if (createUserRequest.getBusinessIds() == null || createUserRequest.getBusinessIds().isEmpty()) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
+
+            // Get current user
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
+            User currentUser = userPrincipal.getUser();
+            UserRole currentUserRole = currentUser.getRole();
+
+            // Role-based validation
+            if (currentUserRole == UserRole.PLATFORM_ADMIN) {
+                // PLATFORM_ADMIN can only create BUSINESS_OWNER
+                if (createUserRequest.getRole() != UserRole.BUSINESS_OWNER) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(null); // Or create an error DTO
+                }
+            } else if (currentUserRole == UserRole.BUSINESS_OWNER) {
+                // BUSINESS_OWNER can only create BUSINESS_STAFF
+                if (createUserRequest.getRole() != UserRole.BUSINESS_STAFF) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                            .body(null);
+                }
+
+                // Check limit: BUSINESS_OWNER can only create max 3 BUSINESS_STAFF
+                // Count existing BUSINESS_STAFF users for businesses owned by current user
+                int existingStaffCount = 0;
+                for (Business ownedBusiness : currentUser.getBusinesses()) {
+                    List<User> staffUsers = userRepository.findByBusinessIdAndIsActiveTrue(ownedBusiness.getId());
+                    existingStaffCount += (int) staffUsers.stream()
+                            .filter(u -> u.getRole() == UserRole.BUSINESS_STAFF)
+                            .count();
+                }
+
+                if (existingStaffCount >= 3) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                            .body(null); // Max limit reached
+                }
+
+                // BUSINESS_OWNER can only assign their own businesses
+                for (UUID businessId : createUserRequest.getBusinessIds()) {
+                    if (!currentUser.hasBusiness(businessId)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                                .body(null); // Trying to assign a business they don't own
+                    }
+                }
+            } else {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
+            // Check if username already exists
+            if (userRepository.existsByUsername(createUserRequest.getUsername())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            }
+
+            // Check if email already exists
+            if (userRepository.existsByEmail(createUserRequest.getEmail())) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            }
+
+            // Validate that all businesses exist
+            for (UUID businessId : createUserRequest.getBusinessIds()) {
+                Optional<Business> business = businessRepository.findById(businessId);
+                if (business.isEmpty()) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+                }
+            }
+
+            // Create user
+            User user = new User(
+                    createUserRequest.getUsername(),
+                    passwordEncoder.encode(createUserRequest.getPassword()),
+                    createUserRequest.getEmail(),
+                    createUserRequest.getRole());
+
+            user.setIsActive(createUserRequest.getIsActive() != null ? createUserRequest.getIsActive() : true);
+
+            // Assign businesses - ensure entities are managed
+            for (UUID businessId : createUserRequest.getBusinessIds()) {
+                Optional<Business> businessOpt = businessRepository.findById(businessId);
+                if (businessOpt.isEmpty()) {
+                    return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
+                }
+                Business business = businessOpt.get();
+                user.addBusiness(business);
+            }
+
+            // Save user (this should persist the many-to-many relationship)
+            User savedUser = userRepository.save(user);
+
+            // Force flush to ensure the many-to-many join table entries are persisted
+            userRepository.flush();
+
+            // Get the saved user ID before clearing context
+            UUID savedUserId = savedUser.getId();
+            System.out.println("Saved user ID: " + savedUserId);
+
+            // Clear persistence context to force fresh load from database
+            entityManager.clear();
+
+            // Reload user with businesses relationship using the query that eagerly fetches
+            Optional<User> reloadedUserOpt = userRepository.findByIdWithBusinesses(savedUserId);
+
+            if (reloadedUserOpt.isEmpty()) {
+                System.err.println("ERROR: User not found after save with ID: " + savedUser.getId());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+            }
+
+            User userWithBusinesses = reloadedUserOpt.get();
+
+            // Force load businesses collection to avoid any lazy loading issues
+            if (userWithBusinesses.getBusinesses() != null) {
+                int size = userWithBusinesses.getBusinesses().size();
+                System.out.println("Reloaded user has " + size + " businesses");
+
+                // Access each business to ensure they're fully loaded
+                for (Business b : userWithBusinesses.getBusinesses()) {
+                    UUID id = b.getId();
+                    String name = b.getName();
+                    System.out.println("  - Business: " + name + " (ID: " + id + ")");
+                }
+            } else {
+                System.err.println("WARNING: Reloaded user has null businesses collection");
+            }
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(convertToDto(userWithBusinesses));
+        } catch (Exception e) {
+            System.err.println("Error in createUser: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
-
-        // Create user
-        User user = new User(
-                createUserRequest.getUsername(),
-                passwordEncoder.encode(createUserRequest.getPassword()),
-                createUserRequest.getEmail(),
-                createUserRequest.getRole());
-
-        user.setIsActive(createUserRequest.getIsActive() != null ? createUserRequest.getIsActive() : true);
-
-        // Assign businesses
-        for (UUID businessId : createUserRequest.getBusinessIds()) {
-            Business business = businessRepository.findById(businessId).get();
-            user.addBusiness(business);
-        }
-
-        User savedUser = userRepository.save(user);
-        return ResponseEntity.status(HttpStatus.CREATED).body(convertToDto(savedUser));
     }
 
     @PutMapping("/{id}")
@@ -234,26 +292,26 @@ public class UserController {
     @Transactional
     @Operation(summary = "Update user", description = "Update an existing user")
     public ResponseEntity<UserDto> updateUser(@PathVariable UUID id,
-                                               @Valid @RequestBody CreateUserRequest updateUserRequest) {
+            @Valid @RequestBody CreateUserRequest updateUserRequest) {
         Optional<User> existingUser = userRepository.findById(id);
         if (existingUser.isEmpty()) {
             return ResponseEntity.notFound().build();
         }
 
         User user = existingUser.get();
-        
+
         // Load businesses relationship
         user.getBusinesses().size();
 
         // Check username uniqueness (if changed)
         if (!user.getUsername().equals(updateUserRequest.getUsername()) &&
-            userRepository.existsByUsername(updateUserRequest.getUsername())) {
+                userRepository.existsByUsername(updateUserRequest.getUsername())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
 
         // Check email uniqueness (if changed)
         if (!user.getEmail().equals(updateUserRequest.getEmail()) &&
-            userRepository.existsByEmail(updateUserRequest.getEmail())) {
+                userRepository.existsByEmail(updateUserRequest.getEmail())) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
 
@@ -269,7 +327,8 @@ public class UserController {
         user.setUsername(updateUserRequest.getUsername());
         user.setEmail(updateUserRequest.getEmail());
         user.setRole(updateUserRequest.getRole());
-        user.setIsActive(updateUserRequest.getIsActive() != null ? updateUserRequest.getIsActive() : user.getIsActive());
+        user.setIsActive(
+                updateUserRequest.getIsActive() != null ? updateUserRequest.getIsActive() : user.getIsActive());
 
         // Update password if provided
         if (updateUserRequest.getPassword() != null && !updateUserRequest.getPassword().isEmpty()) {
@@ -329,14 +388,14 @@ public class UserController {
     private UserDto convertToDto(User user) {
         try {
             java.util.Set<Business> businesses = user.getBusinesses();
-            
+
             System.out.println("Converting user " + user.getUsername() + " to DTO");
-            
+
             // Force initialization of businesses collection
             if (businesses != null) {
                 int size = businesses.size(); // Trigger loading
                 System.out.println("  Businesses collection size: " + size);
-                
+
                 // Access each business to ensure full loading
                 for (Business business : businesses) {
                     UUID businessId = business.getId(); // Ensure business is loaded
@@ -346,7 +405,7 @@ public class UserController {
             } else {
                 System.out.println("  Businesses collection is null");
             }
-            
+
             List<UUID> businessIds = businesses != null && !businesses.isEmpty()
                     ? businesses.stream()
                             .map(Business::getId)
@@ -360,7 +419,8 @@ public class UserController {
                             .collect(Collectors.toList())
                     : new java.util.ArrayList<>();
 
-            System.out.println("  Extracted " + businessIds.size() + " businessIds and " + businessNames.size() + " businessNames");
+            System.out.println("  Extracted " + businessIds.size() + " businessIds and " + businessNames.size()
+                    + " businessNames");
 
             UserDto dto = new UserDto(
                     user.getId(),
@@ -373,14 +433,15 @@ public class UserController {
                     user.getUpdatedAt());
 
             dto.setBusinessNames(businessNames);
-            
+
             // Debug logging
             if (businessNames.isEmpty() && !businessIds.isEmpty()) {
                 System.err.println("Warning: User " + user.getUsername() + " has businessIds but no businessNames");
             }
-            
-            System.out.println("  Final DTO - businessIds: " + dto.getBusinessIds() + ", businessNames: " + dto.getBusinessNames());
-            
+
+            System.out.println("  Final DTO - businessIds: " + dto.getBusinessIds() + ", businessNames: "
+                    + dto.getBusinessNames());
+
             return dto;
         } catch (Exception e) {
             System.err.println("Error converting user to DTO: " + e.getMessage());
@@ -400,4 +461,3 @@ public class UserController {
         }
     }
 }
-
