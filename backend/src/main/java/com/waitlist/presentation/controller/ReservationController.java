@@ -79,10 +79,10 @@ public class ReservationController {
                 }
             }
 
-            List<ReservationDto> reservationDtos = reservations.stream()
-                    .map(this::convertToDto)
-                    .collect(Collectors.toList());
-            return ResponseEntity.ok(reservationDtos);
+        List<ReservationDto> reservationDtos = reservations.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(reservationDtos);
         } catch (Exception e) {
             System.err.println("Error in getAllReservations: " + e.getMessage());
             e.printStackTrace();
@@ -142,35 +142,35 @@ public class ReservationController {
             
             UUID businessId = reservationDto.getBusinessId();
             
-            // Check if business exists and is active
+        // Check if business exists and is active
             Optional<Business> business = businessRepository.findById(businessId);
-            if (business.isEmpty() || !business.get().getIsActive()) {
-                return ResponseEntity.badRequest().build();
-            }
+        if (business.isEmpty() || !business.get().getIsActive()) {
+            return ResponseEntity.badRequest().build();
+        }
 
             // Check if user has access to this business (unless PLATFORM_ADMIN)
             if (currentUserRole != UserRole.PLATFORM_ADMIN && !currentUser.hasBusiness(businessId)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
 
-            // Check if customer exists
-            Optional<Customer> customer = customerRepository.findById(reservationDto.getCustomerId());
-            if (customer.isEmpty()) {
-                return ResponseEntity.badRequest().build();
-            }
+        // Check if customer exists
+        Optional<Customer> customer = customerRepository.findById(reservationDto.getCustomerId());
+        if (customer.isEmpty()) {
+            return ResponseEntity.badRequest().build();
+        }
 
-            // Check for conflicting reservations
-            List<Reservation> conflicts = reservationRepository.findConflictingReservations(
+        // Check for conflicting reservations
+        List<Reservation> conflicts = reservationRepository.findConflictingReservations(
                     businessId,
-                    reservationDto.getReservationDate(),
-                    reservationDto.getReservationTime());
+                reservationDto.getReservationDate(),
+                reservationDto.getReservationTime());
 
-            if (!conflicts.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).build();
-            }
+        if (!conflicts.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).build();
+        }
 
-            Reservation reservation = convertToEntity(reservationDto, business.get(), customer.get());
-            Reservation savedReservation = reservationRepository.save(reservation);
+        Reservation reservation = convertToEntity(reservationDto, business.get(), customer.get());
+        Reservation savedReservation = reservationRepository.save(reservation);
             
             // Reload with relationships for DTO conversion
             Reservation reservationForDto = reservationRepository.findByIdWithBusinessAndCustomer(savedReservation.getId())
