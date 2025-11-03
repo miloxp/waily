@@ -38,31 +38,31 @@ public class CustomerController {
     @Transactional(readOnly = true)
     public ResponseEntity<List<CustomerDto>> getAllCustomers(Authentication authentication) {
         try {
-            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
             User currentUser = userPrincipal.getUser();
             UserRole currentUserRole = currentUser.getRole();
 
             List<Customer> customers;
-            
+
             if (currentUserRole == UserRole.PLATFORM_ADMIN) {
                 // PLATFORM_ADMIN sees all customers
                 customers = customerRepository.findAllWithBusinesses();
             } else {
                 // Business users see only customers associated with their businesses
                 java.util.Set<Business> userBusinesses = currentUser.getBusinesses();
-                
+
                 if (userBusinesses.isEmpty()) {
                     customers = new java.util.ArrayList<>();
                 } else {
                     java.util.List<UUID> businessIds = userBusinesses.stream()
                             .map(Business::getId)
                             .collect(Collectors.toList());
-                    
+
                     customers = customerRepository.findCustomersByBusinessIds(businessIds);
                 }
             }
-            
+
             List<CustomerDto> customerDtos = customers.stream()
                     .map(this::convertToDto)
                     .collect(Collectors.toList());
@@ -113,8 +113,8 @@ public class CustomerController {
             Authentication authentication) {
         try {
             // Get current user's business
-            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
             User currentUser = userPrincipal.getUser();
             java.util.Set<Business> userBusinesses = currentUser.getBusinesses();
 
@@ -125,11 +125,11 @@ public class CustomerController {
             // Check if customer with phone already exists
             Optional<Customer> existingCustomerOpt = customerRepository.findByPhone(customerDto.getPhone());
             Customer customer;
-            
+
             if (existingCustomerOpt.isPresent()) {
                 // Customer exists, just add business association
                 customer = existingCustomerOpt.get();
-                
+
                 // Add all user's businesses to the customer if not already associated
                 for (Business business : userBusinesses) {
                     if (!customer.hasBusiness(business.getId())) {
@@ -139,7 +139,7 @@ public class CustomerController {
             } else {
                 // Create new customer
                 customer = convertToEntity(customerDto);
-                
+
                 // Associate customer with all user's businesses
                 for (Business business : userBusinesses) {
                     customer.addBusiness(business);
@@ -148,7 +148,7 @@ public class CustomerController {
 
             Customer savedCustomer = customerRepository.save(customer);
             customerRepository.flush(); // Ensure relationships are persisted
-            
+
             // Reload customer with businesses
             Customer customerWithBusinesses = customerRepository.findAllWithBusinesses().stream()
                     .filter(c -> c.getId().equals(savedCustomer.getId()))
@@ -188,8 +188,8 @@ public class CustomerController {
             Authentication authentication) {
         try {
             // Get current user's business
-            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
             User currentUser = userPrincipal.getUser();
             java.util.Set<Business> userBusinesses = currentUser.getBusinesses();
 
@@ -209,7 +209,7 @@ public class CustomerController {
                 if (customerDto.getEmail() != null && !customerDto.getEmail().trim().isEmpty()) {
                     customer.setEmail(customerDto.getEmail());
                 }
-                
+
                 // Add business association if not already present
                 for (Business business : userBusinesses) {
                     if (!customer.hasBusiness(business.getId())) {
@@ -219,22 +219,22 @@ public class CustomerController {
             } else {
                 // Create new customer
                 customer = convertToEntity(customerDto);
-                
+
                 // Associate customer with all user's businesses
                 for (Business business : userBusinesses) {
                     customer.addBusiness(business);
                 }
             }
-            
+
             Customer savedCustomer = customerRepository.save(customer);
             customerRepository.flush();
-            
+
             // Reload customer with businesses
             Customer customerWithBusinesses = customerRepository.findAllWithBusinesses().stream()
                     .filter(c -> c.getId().equals(savedCustomer.getId()))
                     .findFirst()
                     .orElse(savedCustomer);
-            
+
             return ResponseEntity.ok(convertToDto(customerWithBusinesses));
         } catch (Exception e) {
             System.err.println("Error in findOrCreateCustomer: " + e.getMessage());
@@ -260,4 +260,3 @@ public class CustomerController {
                 customerDto.getEmail());
     }
 }
-
