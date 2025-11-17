@@ -4,10 +4,13 @@ import com.waitlist.domain.entity.Business;
 import com.waitlist.domain.entity.Customer;
 import com.waitlist.domain.entity.Reservation;
 import com.waitlist.domain.entity.ReservationStatus;
+import com.waitlist.domain.service.SmsService;
 import com.waitlist.infrastructure.repository.BusinessRepository;
 import com.waitlist.infrastructure.repository.CustomerRepository;
 import com.waitlist.infrastructure.repository.ReservationRepository;
 import com.waitlist.presentation.dto.ReservationDto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +36,8 @@ import java.util.stream.Collectors;
 @Tag(name = "Reservations", description = "Reservation management endpoints")
 public class ReservationController {
 
+    private static final Logger logger = LoggerFactory.getLogger(ReservationController.class);
+
     @Autowired
     private ReservationRepository reservationRepository;
 
@@ -42,26 +47,29 @@ public class ReservationController {
     @Autowired
     private CustomerRepository customerRepository;
 
+    @Autowired
+    private SmsService smsService;
+
     @GetMapping
     @Operation(summary = "Get all reservations", description = "Retrieve all reservations (Platform Admin sees all, business users see their business's reservations)")
     @PreAuthorize("hasRole('PLATFORM_ADMIN') or hasRole('BUSINESS_OWNER') or hasRole('BUSINESS_STAFF')")
     @Transactional(readOnly = true)
     public ResponseEntity<List<ReservationDto>> getAllReservations(Authentication authentication) {
         try {
-            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
             User currentUser = userPrincipal.getUser();
             UserRole currentUserRole = currentUser.getRole();
 
             List<Reservation> reservations;
-            
+
             if (currentUserRole == UserRole.PLATFORM_ADMIN) {
                 // PLATFORM_ADMIN sees all reservations
                 reservations = reservationRepository.findAllWithBusinessAndCustomer();
             } else {
                 // Business users see only reservations for their businesses
                 java.util.Set<Business> ownedBusinesses = currentUser.getBusinesses();
-                
+
                 if (ownedBusinesses.isEmpty()) {
                     reservations = new java.util.ArrayList<>();
                 } else {
@@ -69,20 +77,20 @@ public class ReservationController {
                     java.util.List<UUID> businessIds = ownedBusinesses.stream()
                             .map(Business::getId)
                             .collect(Collectors.toList());
-                    
-                    // Get active reservations (PENDING and CONFIRMED) for all their businesses in one query
+
+                    // Get active reservations (PENDING and CONFIRMED) for all their businesses in
+                    // one query
                     java.util.List<ReservationStatus> activeStatuses = java.util.Arrays.asList(
                             ReservationStatus.PENDING,
-                            ReservationStatus.CONFIRMED
-                    );
+                            ReservationStatus.CONFIRMED);
                     reservations = reservationRepository.findByBusinessIdsAndStatuses(businessIds, activeStatuses);
                 }
             }
 
-        List<ReservationDto> reservationDtos = reservations.stream()
-                .map(this::convertToDto)
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(reservationDtos);
+            List<ReservationDto> reservationDtos = reservations.stream()
+                    .map(this::convertToDto)
+                    .collect(Collectors.toList());
+            return ResponseEntity.ok(reservationDtos);
         } catch (Exception e) {
             System.err.println("Error in getAllReservations: " + e.getMessage());
             e.printStackTrace();
@@ -135,45 +143,46 @@ public class ReservationController {
             @Valid @RequestBody ReservationDto reservationDto,
             Authentication authentication) {
         try {
-            CustomUserDetailsService.CustomUserPrincipal userPrincipal = 
-                (CustomUserDetailsService.CustomUserPrincipal) authentication.getPrincipal();
+            CustomUserDetailsService.CustomUserPrincipal userPrincipal = (CustomUserDetailsService.CustomUserPrincipal) authentication
+                    .getPrincipal();
             User currentUser = userPrincipal.getUser();
             UserRole currentUserRole = currentUser.getRole();
-            
+
             UUID businessId = reservationDto.getBusinessId();
-            
-        // Check if business exists and is active
+
+            // Check if business exists and is active
             Optional<Business> business = businessRepository.findById(businessId);
-        if (business.isEmpty() || !business.get().getIsActive()) {
-            return ResponseEntity.badRequest().build();
-        }
+            if (business.isEmpty() || !business.get().getIsActive()) {
+                return ResponseEntity.badRequest().build();
+            }
 
             // Check if user has access to this business (unless PLATFORM_ADMIN)
             if (currentUserRole != UserRole.PLATFORM_ADMIN && !currentUser.hasBusiness(businessId)) {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
 
-        // Check if customer exists
-        Optional<Customer> customer = customerRepository.findById(reservationDto.getCustomerId());
-        if (customer.isEmpty()) {
-            return ResponseEntity.badRequest().build();
-        }
+            // Check if customer exists
+            Optional<Customer> customer = customerRepository.findById(reservationDto.getCustomerId());
+            if (customer.isEmpty()) {
+                return ResponseEntity.badRequest().build();
+            }
 
-        // Check for conflicting reservations
-        List<Reservation> conflicts = reservationRepository.findConflictingReservations(
+            // Check for conflicting reservations
+            List<Reservation> conflicts = reservationRepository.findConflictingReservations(
                     businessId,
-                reservationDto.getReservationDate(),
-                reservationDto.getReservationTime());
+                    reservationDto.getReservationDate(),
+                    reservationDto.getReservationTime());
 
-        if (!conflicts.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.CONFLICT).build();
-        }
+            if (!conflicts.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).build();
+            }
 
-        Reservation reservation = convertToEntity(reservationDto, business.get(), customer.get());
-        Reservation savedReservation = reservationRepository.save(reservation);
-            
+            Reservation reservation = convertToEntity(reservationDto, business.get(), customer.get());
+            Reservation savedReservation = reservationRepository.save(reservation);
+
             // Reload with relationships for DTO conversion
-            Reservation reservationForDto = reservationRepository.findByIdWithBusinessAndCustomer(savedReservation.getId())
+            Reservation reservationForDto = reservationRepository
+                    .findByIdWithBusinessAndCustomer(savedReservation.getId())
                     .orElse(savedReservation);
             return ResponseEntity.status(HttpStatus.CREATED).body(convertToDto(reservationForDto));
         } catch (Exception e) {
@@ -193,30 +202,57 @@ public class ReservationController {
             if (reservationOpt.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
-            
+
             Reservation reservation = reservationOpt.get();
-            
+
             // Check if reservation can be confirmed (must be PENDING)
             if (reservation.getStatus() != ReservationStatus.PENDING) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
-            
+
             // Access relationships before save to ensure they're loaded
             Business business = reservation.getBusiness();
             Customer customer = reservation.getCustomer();
-            
+
             if (business == null || customer == null) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             }
-            
+
             // Trigger lazy loading if needed
-            business.getName();
-            customer.getName();
-            customer.getPhone();
-            
+            String businessName = business.getName();
+            String customerPhone = customer.getPhone();
+
             reservation.confirm();
             Reservation savedReservation = reservationRepository.save(reservation);
-            
+
+            // Send SMS confirmation notification
+            if (customerPhone != null && !customerPhone.isEmpty()) {
+                try {
+                    String reservationDateStr = reservation.getReservationDate().toString();
+                    String reservationTimeStr = reservation.getReservationTime().toString();
+                    boolean smsSent = smsService.sendReservationConfirmation(
+                            customerPhone,
+                            businessName,
+                            reservationDateStr,
+                            reservationTimeStr,
+                            reservation.getPartySize());
+                    if (smsSent) {
+                        logger.info("Reservation confirmation SMS sent to {} for reservation {}",
+                                customerPhone, reservation.getId());
+                    } else {
+                        logger.warn("Failed to send reservation confirmation SMS to {} for reservation {}",
+                                customerPhone, reservation.getId());
+                    }
+                } catch (Exception e) {
+                    // Log error but don't fail the reservation confirmation
+                    logger.error("Error sending reservation confirmation SMS to {}: {}",
+                            customerPhone, e.getMessage());
+                }
+            } else {
+                logger.debug("Customer phone number not available, skipping SMS notification for reservation {}",
+                        reservation.getId());
+            }
+
             return ResponseEntity.ok(convertToDto(savedReservation));
         } catch (Exception e) {
             e.printStackTrace();
@@ -250,30 +286,30 @@ public class ReservationController {
             if (reservationOpt.isEmpty()) {
                 return ResponseEntity.notFound().build();
             }
-            
+
             Reservation reservation = reservationOpt.get();
-            
+
             // Check if reservation can be completed (must be CONFIRMED)
             if (reservation.getStatus() != ReservationStatus.CONFIRMED) {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).build();
             }
-            
+
             // Access relationships before save to ensure they're loaded
             Business business = reservation.getBusiness();
             Customer customer = reservation.getCustomer();
-            
+
             if (business == null || customer == null) {
                 return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
             }
-            
+
             // Trigger lazy loading if needed
             business.getName();
             customer.getName();
             customer.getPhone();
-            
+
             reservation.complete();
             Reservation savedReservation = reservationRepository.save(reservation);
-            
+
             return ResponseEntity.ok(convertToDto(savedReservation));
         } catch (Exception e) {
             e.printStackTrace();
@@ -284,11 +320,11 @@ public class ReservationController {
     private ReservationDto convertToDto(Reservation reservation) {
         Business business = reservation.getBusiness();
         Customer customer = reservation.getCustomer();
-        
+
         if (business == null || customer == null) {
             throw new IllegalStateException("Reservation must have business and customer loaded");
         }
-        
+
         ReservationDto dto = new ReservationDto(
                 reservation.getId(),
                 business.getId(),
