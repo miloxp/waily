@@ -10,62 +10,60 @@ import org.springframework.stereotype.Service;
 @ConditionalOnProperty(name = "sms.mock.enabled", havingValue = "true", matchIfMissing = true)
 public class MockSmsService implements SmsService {
 
-    private static final Logger logger = LoggerFactory.getLogger(MockSmsService.class);
+        private static final Logger logger = LoggerFactory.getLogger(MockSmsService.class);
 
-    @Override
-    public boolean sendSms(String phoneNumber, String message) {
-        logger.info("MOCK SMS to {}: {}", phoneNumber, message);
-        return true;
-    }
+        public MockSmsService() {
+                logger.info("MockSmsService initialized - SMS will be logged but not sent");
+        }
 
-    @Override
-    public boolean sendWaitlistNotification(String phoneNumber, String businessName,
-            Integer estimatedWaitTime, Integer position) {
-        String message = String.format(
-                "Hi! You're #%d on the waitlist at %s. " +
-                        "Estimated wait time: %d minutes. " +
-                        "We'll text you when your table is ready!",
-                position, businessName, estimatedWaitTime);
+        @Override
+        public boolean sendSms(String phoneNumber, String message) {
+                logger.info("MOCK SMS to {}: {}", phoneNumber, message);
+                return true;
+        }
 
-        logger.info("MOCK Waitlist Notification to {}: {}", phoneNumber, message);
-        return true;
-    }
+        @Override
+        public boolean sendWaitlistNotification(String phoneNumber, String businessName,
+                        Integer estimatedWaitTime, Integer position) {
+                String message = String.format(
+                                "Posición #%d en %s. Espera: %d min. Te avisamos cuando esté lista.",
+                                position, businessName, estimatedWaitTime);
 
-    @Override
-    public boolean sendTableReadyNotification(String phoneNumber, String businessName, String businessPhone) {
-        String message = String.format(
-                "Your table is ready at %s! Please come to the host stand. " +
-                        "If you have any questions, call us at %s. " +
-                        "You have 15 minutes to claim your table.",
-                businessName, businessPhone);
+                logger.info("MOCK Waitlist Notification to {}: {}", phoneNumber, message);
+                return true;
+        }
 
-        logger.info("MOCK Table Ready Notification to {}: {}", phoneNumber, message);
-        return true;
-    }
+        @Override
+        public boolean sendTableReadyNotification(String phoneNumber, String businessName, String businessPhone) {
+                String message = String.format(
+                                "¡Mesa lista en %s! Acércate a recepción. Tienes 15 min. Tel: %s",
+                                businessName, businessPhone);
 
-    @Override
-    public boolean sendReservationConfirmation(String phoneNumber, String businessName,
-            String reservationDate, String reservationTime,
-            Integer partySize) {
-        String message = String.format(
-                "Reservation confirmed at %s for %s at %s for %d people. " +
-                        "We look forward to seeing you!",
-                businessName, reservationDate, reservationTime, partySize);
+                logger.info("MOCK Table Ready Notification to {}: {}", phoneNumber, message);
+                return true;
+        }
 
-        logger.info("MOCK Reservation Confirmation to {}: {}", phoneNumber, message);
-        return true;
-    }
+        @Override
+        public boolean sendReservationConfirmation(String phoneNumber, String businessName,
+                        String reservationDate, String reservationTime,
+                        Integer partySize) {
+                String message = String.format(
+                                "Reservación confirmada en %s: %s a las %s para %d persona%s. ¡Te esperamos!",
+                                businessName, reservationDate, reservationTime, partySize,
+                                partySize == 1 ? "" : "s");
 
-    @Override
-    public boolean sendReservationReminder(String phoneNumber, String businessName,
-            String reservationDate, String reservationTime) {
-        String message = String.format(
-                "Reminder: You have a reservation at %s tomorrow (%s) at %s. " +
-                        "Please arrive 5 minutes early. We look forward to seeing you!",
-                businessName, reservationDate, reservationTime);
+                logger.info("MOCK Reservation Confirmation to {}: {}", phoneNumber, message);
+                return true;
+        }
 
-        logger.info("MOCK Reservation Reminder to {}: {}", phoneNumber, message);
-        return true;
-    }
+        @Override
+        public boolean sendReservationReminder(String phoneNumber, String businessName,
+                        String reservationDate, String reservationTime) {
+                String message = String.format(
+                                "Recordatorio: Reservación en %s mañana (%s) a las %s. Llega 5 min antes.",
+                                businessName, reservationDate, reservationTime);
+
+                logger.info("MOCK Reservation Reminder to {}: {}", phoneNumber, message);
+                return true;
+        }
 }
-
