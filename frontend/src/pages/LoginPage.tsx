@@ -39,16 +39,20 @@ export default function LoginPage() {
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="username" className="sr-only">
-                Nombre de usuario
+                Email
               </label>
               <input
                 {...register("username", {
-                  required: "El nombre de usuario es requerido",
+                  required: "El email es requerido",
+                  pattern: {
+                    value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                    message: "Email inválido",
+                  },
                 })}
-                type="text"
+                type="email"
                 autoComplete="username"
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 focus:z-10 sm:text-sm"
-                placeholder="Nombre de usuario"
+                placeholder="Email"
               />
               {errors.username && (
                 <p className="mt-1 text-sm text-red-600">

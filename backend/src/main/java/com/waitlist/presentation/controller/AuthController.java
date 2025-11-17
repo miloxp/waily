@@ -102,8 +102,11 @@ public class AuthController {
     @Operation(summary = "Register business", description = "Register a new business account")
     public ResponseEntity<LoginResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
         try {
-            // Check if username or email already exists
-            if (userRepository.existsByUsername(registerRequest.getUsername())) {
+            // Use email as username
+            String username = registerRequest.getEmail();
+            
+            // Check if username (email) already exists
+            if (userRepository.existsByUsername(username)) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).build();
             }
 
@@ -123,9 +126,9 @@ public class AuthController {
 
             Business savedBusiness = businessRepository.save(business);
 
-            // Create user
+            // Create user - use email as username
             User user = new User(
-                    registerRequest.getUsername(),
+                    username,
                     passwordEncoder.encode(registerRequest.getPassword()),
                     registerRequest.getEmail(),
                     savedBusiness,

@@ -90,7 +90,6 @@ export default function UserForm({
     if (isOpen) {
       if (user) {
         reset({
-          username: user.username,
           email: user.email,
           role: user.role,
           businessIds: user.businessIds,
@@ -99,7 +98,6 @@ export default function UserForm({
         });
       } else {
         reset({
-          username: "",
           email: "",
           role: availableRoles[0] || UserRole.BUSINESS_OWNER,
           businessIds: [],
@@ -115,8 +113,10 @@ export default function UserForm({
       if (!data.password || data.password.trim() === "") {
         throw new Error("Password is required");
       }
+      // Exclude username - backend will use email as username
+      const { username, ...userData } = data;
       return apiService.createUser({
-        ...data,
+        ...userData,
         password: data.password!,
       } as any);
     },
@@ -129,7 +129,7 @@ export default function UserForm({
       },
       onError: (error: any) => {
         if (error.response?.status === 409) {
-          toast.error("El nombre de usuario o email ya existe");
+          toast.error("El email ya existe");
         } else if (error.response?.status === 403) {
           toast.error("No tienes permiso para crear usuarios con este rol");
         } else if (error.response?.status === 400) {
@@ -142,8 +142,11 @@ export default function UserForm({
   );
 
   const updateMutation = useMutation(
-    (data: UserFormData) =>
-      apiService.updateUser(user!.id, data),
+    (data: UserFormData) => {
+      // Exclude username - backend will use email as username
+      const { username, ...userData } = data;
+      return apiService.updateUser(user!.id, userData as any);
+    },
     {
       onSuccess: () => {
         queryClient.invalidateQueries("users");
@@ -152,7 +155,7 @@ export default function UserForm({
       },
       onError: (error: any) => {
         if (error.response?.status === 409) {
-          toast.error("El nombre de usuario o email ya existe");
+          toast.error("El email ya existe");
         } else {
           toast.error("Error al actualizar el usuario");
         }
@@ -195,25 +198,6 @@ export default function UserForm({
       title={isEditing ? "Editar Usuario" : "Nuevo Usuario"}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div>
-          <label className="label">Nombre de Usuario *</label>
-          <input
-            {...register("username", {
-              required: "El nombre de usuario es requerido",
-              minLength: {
-                value: 3,
-                message: "El nombre de usuario debe tener al menos 3 caracteres",
-              },
-            })}
-            className={errors.username ? "input-error" : "input"}
-          />
-          {errors.username && (
-            <p className="mt-1 text-sm text-red-600">
-              {errors.username.message}
-            </p>
-          )}
-        </div>
-
         <div>
           <label className="label">Email *</label>
           <input

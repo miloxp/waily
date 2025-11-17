@@ -204,8 +204,11 @@ public class UserController {
                 return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
             }
 
-            // Check if username already exists
-            if (userRepository.existsByUsername(createUserRequest.getUsername())) {
+            // Use email as username
+            String username = createUserRequest.getEmail();
+
+            // Check if username (email) already exists
+            if (userRepository.existsByUsername(username)) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).build();
             }
 
@@ -222,9 +225,9 @@ public class UserController {
                 }
             }
 
-            // Create user
+            // Create user - use email as username
             User user = new User(
-                    createUserRequest.getUsername(),
+                    username,
                     passwordEncoder.encode(createUserRequest.getPassword()),
                     createUserRequest.getEmail(),
                     createUserRequest.getRole());
@@ -303,9 +306,12 @@ public class UserController {
         // Load businesses relationship
         user.getBusinesses().size();
 
-        // Check username uniqueness (if changed)
-        if (!user.getUsername().equals(updateUserRequest.getUsername()) &&
-                userRepository.existsByUsername(updateUserRequest.getUsername())) {
+        // Use email as username
+        String newUsername = updateUserRequest.getEmail();
+
+        // Check username (email) uniqueness (if changed)
+        if (!user.getUsername().equals(newUsername) &&
+                userRepository.existsByUsername(newUsername)) {
             return ResponseEntity.status(HttpStatus.CONFLICT).build();
         }
 
@@ -323,8 +329,8 @@ public class UserController {
             }
         }
 
-        // Update user fields
-        user.setUsername(updateUserRequest.getUsername());
+        // Update user fields - username is automatically set to email
+        user.setUsername(newUsername);
         user.setEmail(updateUserRequest.getEmail());
         user.setRole(updateUserRequest.getRole());
         user.setIsActive(
