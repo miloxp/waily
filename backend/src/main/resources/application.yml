@@ -32,6 +32,11 @@ twilio:
   auth-token: ${TWILIO_AUTH_TOKEN:}
   phone-number: ${TWILIO_PHONE_NUMBER:}
 
+# SMS Configuration
+sms:
+  mock:
+    enabled: ${SMS_MOCK_ENABLED:true}
+
 # CORS Configuration
 cors:
   allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
